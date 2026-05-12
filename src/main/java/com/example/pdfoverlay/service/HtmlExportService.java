@@ -95,6 +95,31 @@ public final class HtmlExportService {
             Files.createDirectories(parent);
         }
 
+        String html = buildHtmlContent(project, renderDpi, includePdfBackground, exportOptions);
+
+        Files.writeString(htmlPath, html, StandardCharsets.UTF_8);
+        LOGGER.log(Level.INFO, "HTML exported: {0}", htmlPath);
+        return htmlPath;
+    }
+
+    /**
+     * Construye el HTML exportable en memoria.
+     *
+     * @param project              proyecto fuente.
+     * @param renderDpi            resolución para render de fondo.
+     * @param includePdfBackground true para incrustar fondo PDF.
+     * @param exportOptions        opciones visuales de exportación.
+     * @return contenido HTML completo.
+     * @throws IOException cuando falla la conversión de páginas PDF.
+     */
+    public String buildHtmlContent(OverlayProject project, float renderDpi,
+                                   boolean includePdfBackground, ExportOptions exportOptions) throws IOException {
+        Objects.requireNonNull(project, "project is required");
+        Objects.requireNonNull(exportOptions, "exportOptions is required");
+        if (renderDpi <= 0) {
+            throw new IllegalArgumentException("renderDpi must be > 0");
+        }
+
         StringBuilder html = new StringBuilder();
         html.append(buildHtmlHeader(exportOptions));
 
@@ -111,10 +136,7 @@ public final class HtmlExportService {
 
         html.append(buildMetadataComment(project));
         html.append("</body>\n</html>\n");
-
-        Files.writeString(htmlPath, html.toString(), StandardCharsets.UTF_8);
-        LOGGER.log(Level.INFO, "HTML exported: {0}", htmlPath);
-        return htmlPath;
+        return html.toString();
     }
 
     /**

@@ -30,6 +30,9 @@ El editor permite ubicar elementos por coordenadas relativas (`%`), lo que manti
   - mensajes operativos
   - tamaño del documento/página (`in` y `pt`)
   - control de zoom y porcentaje actual
+- Vista por pestañas:
+  - `Graphic Mode` para edición visual
+  - `HTML Source` para ver el código generado (se actualiza al abrir la pestaña)
 - Exportación **single-file** (`.html`) con:
   - fondo PDF embebido en Base64
   - metadata embebida para reabrir el diseño

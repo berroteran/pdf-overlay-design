@@ -79,4 +79,23 @@ class OverlayElementTest {
         );
         assertThrows(IllegalArgumentException.class, () -> tableElement.setTableDataRows(2));
     }
+
+    /**
+     * Verifica edición de ID y validación de valor vacío.
+     */
+    @Test
+    void shouldAllowUpdatingIdAndRejectBlankValues() {
+        OverlayElement element = new OverlayElement(
+                OverlayElementType.TEXT_FIELD,
+                0.1,
+                0.2,
+                0.3,
+                0.1,
+                "x"
+        );
+        element.setId("textbox12");
+        assertEquals("textbox12", element.getId());
+        assertEquals("textbox12", element.copy().getId());
+        assertThrows(IllegalArgumentException.class, () -> element.setId("   "));
+    }
 }

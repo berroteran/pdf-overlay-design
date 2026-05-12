@@ -129,7 +129,7 @@ Esto permite:
 2. Seleccionar herramienta (`Text`, `Label`, `Button`, `Point`)
 3. Clic sobre el canvas para insertar
 4. Cambiar a `Select` y arrastrar para ajustar posición
-5. Editar texto del elemento desde panel derecho
+5. Editar `ID` (único) y texto del elemento desde panel derecho
 6. En elementos `Table`, configurar:
    - ancho por columna (`%`, separado por comas)
    - filas de detalle (`1` o `4`)

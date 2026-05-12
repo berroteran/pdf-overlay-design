@@ -10,6 +10,7 @@ import com.example.pdfoverlay.service.ExportOptions;
 import com.example.pdfoverlay.service.HtmlExportService;
 import com.example.pdfoverlay.service.PdfService;
 import com.example.pdfoverlay.service.PrintService;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
@@ -73,6 +74,7 @@ public final class MainViewController {
     private static final float PREVIEW_DPI = 180.0f;
     private static final int DEFAULT_TABLE_COLUMNS = 4;
     private static final int MAX_TABLE_COLUMNS = 12;
+    private static final double ZOOM_STEP = 0.1d;
 
     private final Stage ownerStage;
     private final PdfService pdfService;
@@ -91,6 +93,8 @@ public final class MainViewController {
     private final Label documentSizeLabel;
     private final Label zoomValueLabel;
     private final Label selectedElementTypeLabel;
+    private final TextField selectedElementIdField;
+    private final Button applyElementIdButton;
     private final TextField selectedElementTextField;
     private final TextField tableWidthPercentField;
     private final TextField tableColumnWidthsField;
@@ -142,6 +146,8 @@ public final class MainViewController {
         this.documentSizeLabel = new Label("Document size: -");
         this.zoomValueLabel = new Label("100%");
         this.selectedElementTypeLabel = new Label("None");
+        this.selectedElementIdField = new TextField();
+        this.applyElementIdButton = new Button("Apply ID");
         this.selectedElementTextField = new TextField();
         this.tableWidthPercentField = new TextField();
         this.tableColumnWidthsField = new TextField();
@@ -159,6 +165,8 @@ public final class MainViewController {
         this.deleteSelectedButton = new Button("Delete selected");
 
         this.elementNodes = new HashMap<>();
+        this.selectedElementIdField.setDisable(true);
+        this.applyElementIdButton.setDisable(true);
 
         this.activeTool = EditorTool.SELECT;
         this.currentPageIndex = 0;
@@ -213,6 +221,33 @@ public final class MainViewController {
             if (event.getCode() == KeyCode.DELETE) {
                 removeSelectedElement();
                 event.consume();
+                return;
+            }
+
+            if (event.isShortcutDown()) {
+                switch (event.getCode()) {
+                    case Q -> {
+                        Platform.exit();
+                        event.consume();
+                    }
+                    case PLUS, ADD -> {
+                        zoomIn();
+                        event.consume();
+                    }
+                    case MINUS, SUBTRACT -> {
+                        zoomOut();
+                        event.consume();
+                    }
+                    case EQUALS -> {
+                        if (event.isShiftDown()) {
+                            zoomIn();
+                            event.consume();
+                        }
+                    }
+                    default -> {
+                        // No-op.
+                    }
+                }
             }
         });
 
@@ -226,7 +261,10 @@ public final class MainViewController {
         exportDpiCombo.getItems().addAll(150, 200, 300, 600);
         exportDpiCombo.setValue(300);
 
+        selectedElementIdField.setPromptText("Unique element ID");
         selectedElementTextField.setPromptText("Text for selected element");
+        applyElementIdButton.getStyleClass().add("action-button-medium");
+        applyElementIdButton.setOnAction(event -> applySelectedElementId());
         tableWidthPercentField.setPromptText("Example: 55");
         tableColumnWidthsField.setPromptText("Example: 20,30,25,25");
         tableRowsCombo.getItems().addAll(1, 4);
@@ -246,6 +284,14 @@ public final class MainViewController {
                 statusLabel.setText("Active tool: " + activeTool.name());
             }
         });
+    }
+
+    private void zoomIn() {
+        zoomSlider.setValue(clamp(zoomSlider.getValue() + ZOOM_STEP, zoomSlider.getMin(), zoomSlider.getMax()));
+    }
+
+    private void zoomOut() {
+        zoomSlider.setValue(clamp(zoomSlider.getValue() - ZOOM_STEP, zoomSlider.getMin(), zoomSlider.getMax()));
     }
 
     private Node buildTopToolbar() {
@@ -316,6 +362,17 @@ public final class MainViewController {
         return button;
     }
 
+    private void activateTool(EditorTool tool) {
+        for (javafx.scene.control.Toggle toggle : toolToggleGroup.getToggles()) {
+            if (toggle.getUserData() == tool) {
+                toolToggleGroup.selectToggle(toggle);
+                return;
+            }
+        }
+        activeTool = tool;
+        statusLabel.setText("Active tool: " + activeTool.name());
+    }
+
     private Node buildInspectorPanel() {
         Label inspectorTitle = new Label("Element inspector");
         inspectorTitle.getStyleClass().add("panel-title");
@@ -336,6 +393,9 @@ public final class MainViewController {
                 inspectorTitle,
                 new Label("Type"),
                 selectedElementTypeLabel,
+                new Label("ID"),
+                selectedElementIdField,
+                applyElementIdButton,
                 new Label("Text"),
                 selectedElementTextField,
                 applyTextButton,
@@ -452,6 +512,7 @@ public final class MainViewController {
             Path htmlPath = selectedFile.toPath();
             OverlayProject loadedProject = htmlExportService.loadProjectFromHtml(htmlPath);
             currentProject = loadedProject;
+            normalizeElementIdsInProject();
             currentHtmlPath = htmlPath;
             currentPageIndex = 0;
             clearSelection();
@@ -518,7 +579,7 @@ public final class MainViewController {
 
     private Region createVisualNode(OverlayElement element) {
         Region node;
-        String textValue = element.getText().isBlank() ? defaultTextForType(element.getType()) : element.getText();
+        String textValue = resolveDefaultText(element);
 
         switch (element.getType()) {
             case TEXT_FIELD -> {
@@ -654,6 +715,14 @@ public final class MainViewController {
         DragState dragState = new DragState();
 
         node.setOnMousePressed(event -> {
+            if (activeTool != EditorTool.SELECT) {
+                activateTool(EditorTool.SELECT);
+                selectElement(element, node);
+                statusLabel.setText("Tool switched to SELECT");
+                event.consume();
+                return;
+            }
+
             selectElement(element, node);
             dragState.dragStartMouseX = event.getSceneX();
             dragState.dragStartMouseY = event.getSceneY();
@@ -770,7 +839,9 @@ public final class MainViewController {
         double widthRatio = widthPx / currentPagePixelWidth;
         double heightRatio = heightPx / currentPagePixelHeight;
 
-        OverlayElement element = new OverlayElement(type, xRatio, yRatio, widthRatio, heightRatio, defaultTextForType(type));
+        String nextId = generateNextElementId(type);
+        OverlayElement element = new OverlayElement(type, xRatio, yRatio, widthRatio, heightRatio, defaultTextForType(type, nextId));
+        element.setId(nextId);
 
         if (type == OverlayElementType.TABLE) {
             int tableColumns = requestedTableColumns == null ? DEFAULT_TABLE_COLUMNS : requestedTableColumns;
@@ -782,14 +853,21 @@ public final class MainViewController {
         return element;
     }
 
-    private String defaultTextForType(OverlayElementType type) {
+    private String defaultTextForType(OverlayElementType type, String elementId) {
         return switch (type) {
-            case TEXT_FIELD -> "Text";
-            case LABEL -> "Label";
-            case BUTTON -> "Button";
+            case TEXT_FIELD -> elementId;
+            case LABEL -> elementId;
+            case BUTTON -> elementId;
             case MARKER -> "";
             case TABLE -> buildDefaultTableHeaders(DEFAULT_TABLE_COLUMNS);
         };
+    }
+
+    private String resolveDefaultText(OverlayElement element) {
+        if (!element.getText().isBlank()) {
+            return element.getText();
+        }
+        return defaultTextForType(element.getType(), element.getId());
     }
 
     private void selectElement(OverlayElement element, Region node) {
@@ -805,7 +883,10 @@ public final class MainViewController {
         }
 
         selectedElementTypeLabel.setText(element.getType().name());
+        selectedElementIdField.setText(element.getId());
         selectedElementTextField.setText(element.getText());
+        selectedElementIdField.setDisable(false);
+        applyElementIdButton.setDisable(false);
         deleteSelectedButton.setDisable(false);
         updateTableInspectorFields(element);
     }
@@ -817,6 +898,9 @@ public final class MainViewController {
         selectedElement = null;
         selectedNode = null;
         selectedElementTypeLabel.setText("None");
+        selectedElementIdField.clear();
+        selectedElementIdField.setDisable(true);
+        applyElementIdButton.setDisable(true);
         selectedElementTextField.setPromptText("Text for selected element");
         selectedElementTextField.clear();
         tableWidthPercentField.clear();
@@ -838,13 +922,44 @@ public final class MainViewController {
         selectedElement.setText(newText);
 
         if (selectedNode instanceof Label labelNode) {
-            labelNode.setText(newText.isBlank() ? defaultTextForType(selectedElement.getType()) : newText);
+            labelNode.setText(resolveDefaultText(selectedElement));
         } else if (selectedElement.getType() == OverlayElementType.TABLE) {
             refreshVisualNode(selectedElement);
         }
 
         updateElementFromNode(selectedElement, selectedNode);
         statusLabel.setText("Element text updated");
+    }
+
+    private void applySelectedElementId() {
+        if (selectedElement == null) {
+            statusLabel.setText("Select an element first");
+            return;
+        }
+
+        String newId = Optional.ofNullable(selectedElementIdField.getText()).orElse("").strip();
+        if (newId.isBlank()) {
+            showError("Invalid ID", "ID must not be empty");
+            return;
+        }
+
+        String oldId = selectedElement.getId();
+        if (oldId.equals(newId)) {
+            statusLabel.setText("Element ID unchanged");
+            return;
+        }
+
+        if (!isElementIdAvailable(newId, selectedElement)) {
+            showError("Duplicate ID", "An element with this ID already exists");
+            return;
+        }
+
+        selectedElement.setId(newId);
+        Region node = elementNodes.remove(oldId);
+        if (node != null) {
+            elementNodes.put(newId, node);
+        }
+        statusLabel.setText("Element ID updated");
     }
 
     private void applySelectedTableConfiguration() {
@@ -1002,6 +1117,89 @@ public final class MainViewController {
 
     private String formatZoomPercentage(double zoomScale) {
         return String.format(Locale.US, "%.0f%%", zoomScale * 100.0d);
+    }
+
+    private void normalizeElementIdsInProject() {
+        if (currentProject == null) {
+            return;
+        }
+
+        Map<OverlayElementType, Integer> counters = new HashMap<>();
+        for (PdfPageMetadata pageMetadata : currentProject.getMetadata().getPages()) {
+            OverlayPage page = currentProject.getOverlayPage(pageMetadata.pageIndex());
+            for (OverlayElement element : page.mutableElements()) {
+                String prefix = idPrefixForType(element.getType());
+                int next = counters.getOrDefault(element.getType(), 0) + 1;
+                String expectedId = prefix + next;
+                element.setId(expectedId);
+                counters.put(element.getType(), next);
+            }
+        }
+    }
+
+    private boolean isElementIdAvailable(String candidateId, OverlayElement excludedElement) {
+        if (currentProject == null) {
+            return true;
+        }
+        for (PdfPageMetadata pageMetadata : currentProject.getMetadata().getPages()) {
+            OverlayPage page = currentProject.getOverlayPage(pageMetadata.pageIndex());
+            for (OverlayElement element : page.mutableElements()) {
+                if (excludedElement != null && element == excludedElement) {
+                    continue;
+                }
+                if (element.getId().equalsIgnoreCase(candidateId)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private String generateNextElementId(OverlayElementType type) {
+        String prefix = idPrefixForType(type);
+        int maxSuffix = 0;
+
+        if (currentProject != null) {
+            for (PdfPageMetadata pageMetadata : currentProject.getMetadata().getPages()) {
+                OverlayPage page = currentProject.getOverlayPage(pageMetadata.pageIndex());
+                for (OverlayElement element : page.mutableElements()) {
+                    int suffix = extractSuffix(element.getId(), prefix);
+                    if (suffix > maxSuffix) {
+                        maxSuffix = suffix;
+                    }
+                }
+            }
+        }
+        return prefix + (maxSuffix + 1);
+    }
+
+    private String idPrefixForType(OverlayElementType type) {
+        return switch (type) {
+            case TEXT_FIELD -> "textbox";
+            case LABEL -> "label";
+            case MARKER -> "point";
+            case TABLE -> "table";
+            case BUTTON -> "button";
+        };
+    }
+
+    private int extractSuffix(String idValue, String prefix) {
+        if (idValue == null) {
+            return -1;
+        }
+        String normalizedId = idValue.strip().toLowerCase(Locale.ROOT);
+        if (!normalizedId.startsWith(prefix)) {
+            return -1;
+        }
+        String suffixPart = normalizedId.substring(prefix.length());
+        if (suffixPart.isBlank()) {
+            return -1;
+        }
+        try {
+            return Integer.parseInt(suffixPart);
+        } catch (NumberFormatException ex) {
+            return -1;
+        }
     }
 
     private String buildDefaultTableHeaders(int columns) {

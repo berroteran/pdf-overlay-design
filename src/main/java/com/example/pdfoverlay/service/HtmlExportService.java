@@ -332,42 +332,45 @@ public final class HtmlExportService {
         String width = percent(element.getWidthRatio());
         String height = percent(element.getHeightRatio());
         String text = escapeHtml(element.getText());
+        String elementId = escapeHtml(element.getId());
 
         String commonStyle = "left:%s;top:%s;width:%s;height:%s;".formatted(left, top, width, height);
 
         return switch (element.getType()) {
             case TEXT_FIELD -> """
-                    <table class="overlay-item overlay-text" style="%s">
+                    <table id="%s" class="overlay-item overlay-text" style="%s">
                         <tbody><tr><td>%s</td></tr></tbody>
                     </table>
-                    """.formatted(commonStyle, text);
+                    """.formatted(elementId, commonStyle, text);
             case LABEL -> """
-                    <table class="overlay-item overlay-label" style="%s">
+                    <table id="%s" class="overlay-item overlay-label" style="%s">
                         <tbody><tr><td>%s</td></tr></tbody>
                     </table>
-                    """.formatted(commonStyle, text);
+                    """.formatted(elementId, commonStyle, text);
             case BUTTON -> """
-                    <table class="overlay-item overlay-button" style="%s">
+                    <table id="%s" class="overlay-item overlay-button" style="%s">
                         <tbody><tr><td>%s</td></tr></tbody>
                     </table>
-                    """.formatted(commonStyle, text.isBlank() ? "Button" : text);
+                    """.formatted(elementId, commonStyle, text.isBlank() ? "Button" : text);
             case MARKER -> """
-                    <table class="overlay-item overlay-marker" style="%s">
+                    <table id="%s" class="overlay-item overlay-marker" style="%s">
                         <tbody><tr><td></td></tr></tbody>
                     </table>
-                    """.formatted(commonStyle);
-            case TABLE -> buildTableElementMarkup(element, commonStyle);
+                    """.formatted(elementId, commonStyle);
+            case TABLE -> buildTableElementMarkup(element, commonStyle, elementId);
         };
     }
 
-    private String buildTableElementMarkup(OverlayElement element, String commonStyle) {
+    private String buildTableElementMarkup(OverlayElement element, String commonStyle, String elementId) {
         int columnCount = Math.max(1, element.getTableColumnCount());
         int detailRows = element.getTableDataRows();
         List<Double> columnWidths = parseTableColumnWidths(element.getTableColumnWidths(), columnCount);
         List<String> headers = parseTableHeaders(element.getText(), columnCount);
 
         StringBuilder builder = new StringBuilder();
-        builder.append("<table class=\"overlay-item overlay-table\" style=\"")
+        builder.append("<table id=\"")
+                .append(elementId)
+                .append("\" class=\"overlay-item overlay-table\" style=\"")
                 .append(commonStyle)
                 .append("\">\n");
 
@@ -425,7 +428,8 @@ public final class HtmlExportService {
                         .append(base64Encode(element.getText())).append(',')
                         .append(element.getTableColumnCount()).append(',')
                         .append(element.getTableDataRows()).append(',')
-                        .append(base64Encode(element.getTableColumnWidths()))
+                        .append(base64Encode(element.getTableColumnWidths())).append(',')
+                        .append(base64Encode(element.getId()))
                         .append('\n');
             }
         }
@@ -485,7 +489,7 @@ public final class HtmlExportService {
 
             if (line.startsWith("ELEMENT=")) {
                 String payload = line.substring("ELEMENT=".length());
-                String[] tokens = payload.split(",", 10);
+                String[] tokens = payload.split(",", 11);
                 if (tokens.length < 7) {
                     throw new IllegalArgumentException("Invalid ELEMENT metadata line: " + line);
                 }
@@ -500,9 +504,13 @@ public final class HtmlExportService {
                 int tableColumnCount = tokens.length >= 8 ? Integer.parseInt(tokens[7]) : 0;
                 int tableDataRows = tokens.length >= 9 ? Integer.parseInt(tokens[8]) : 1;
                 String tableColumnWidths = tokens.length >= 10 ? base64Decode(tokens[9]) : "";
+                String elementId = tokens.length >= 11 ? base64Decode(tokens[10]) : null;
 
                 OverlayPage overlayPage = overlayPages.computeIfAbsent(pageIndex, OverlayPage::new);
                 OverlayElement element = new OverlayElement(type, xRatio, yRatio, widthRatio, heightRatio, text);
+                if (elementId != null && !elementId.isBlank()) {
+                    element.setId(elementId);
+                }
                 element.setTableColumnCount(tableColumnCount);
                 if (tableDataRows == 1 || tableDataRows == 4) {
                     element.setTableDataRows(tableDataRows);

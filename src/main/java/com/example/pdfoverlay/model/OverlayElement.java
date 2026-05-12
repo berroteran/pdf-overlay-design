@@ -1,13 +1,15 @@
 package com.example.pdfoverlay.model;
 
 import java.util.Objects;
-import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Elemento editable de la capa de overlay.
  */
 public final class OverlayElement {
-    private final String id;
+    private static final AtomicInteger DEFAULT_ID_SEQUENCE = new AtomicInteger(0);
+
+    private String id;
     private final OverlayElementType type;
     private double xRatio;
     private double yRatio;
@@ -30,7 +32,7 @@ public final class OverlayElement {
      */
     public OverlayElement(OverlayElementType type, double xRatio, double yRatio,
                           double widthRatio, double heightRatio, String text) {
-        this(UUID.randomUUID().toString(), type, xRatio, yRatio, widthRatio, heightRatio, text);
+        this("element" + DEFAULT_ID_SEQUENCE.incrementAndGet(), type, xRatio, yRatio, widthRatio, heightRatio, text);
     }
 
     /**
@@ -46,7 +48,7 @@ public final class OverlayElement {
      */
     public OverlayElement(String id, OverlayElementType type, double xRatio, double yRatio,
                           double widthRatio, double heightRatio, String text) {
-        this.id = Objects.requireNonNull(id, "id is required");
+        setId(id);
         this.type = Objects.requireNonNull(type, "type is required");
         setXRatio(xRatio);
         setYRatio(yRatio);
@@ -63,6 +65,19 @@ public final class OverlayElement {
      */
     public String getId() {
         return id;
+    }
+
+    /**
+     * Actualiza el identificador del elemento.
+     *
+     * @param id nuevo identificador.
+     */
+    public void setId(String id) {
+        String normalized = Objects.requireNonNull(id, "id is required").strip();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("id must not be blank");
+        }
+        this.id = normalized;
     }
 
     /**

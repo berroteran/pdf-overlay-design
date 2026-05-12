@@ -32,7 +32,6 @@ import javafx.scene.control.Separator;
 import javafx.scene.control.Slider;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
-import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToggleButton;
@@ -41,6 +40,7 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
@@ -51,6 +51,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.RowConstraints;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.web.WebView;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -68,6 +69,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Controlador principal de la aplicación de edición.
@@ -82,6 +85,17 @@ public final class MainViewController {
     private static final int MAX_TABLE_COLUMNS = 12;
     private static final double ZOOM_STEP_PERCENT = 10.0d;
     private static final int AUTO_FIT_MAX_ATTEMPTS = 16;
+    private static final String SOURCE_BLOCK_FULL = "Full document";
+    private static final String SOURCE_BLOCK_HEAD = "HEAD";
+    private static final String SOURCE_BLOCK_STYLE = "STYLE";
+    private static final String SOURCE_BLOCK_BODY = "BODY";
+    private static final String SOURCE_BLOCK_METADATA = "Metadata";
+    private static final Pattern HTML_HEAD_PATTERN = Pattern.compile("(?is)<head\\b[^>]*>(.*?)</head>");
+    private static final Pattern HTML_BODY_PATTERN = Pattern.compile("(?is)<body\\b[^>]*>(.*?)</body>");
+    private static final Pattern HTML_STYLE_PATTERN = Pattern.compile("(?is)<style\\b[^>]*>.*?</style>");
+    private static final Pattern OVERLAY_METADATA_PATTERN = Pattern.compile(
+            "(?is)<!--\\s*PDF_OVERLAY_METADATA_BEGIN.*?PDF_OVERLAY_METADATA_END\\s*-->"
+    );
 
     private final Stage ownerStage;
     private final PdfService pdfService;
@@ -96,7 +110,8 @@ public final class MainViewController {
     private final TabPane workspaceTabPane;
     private final Tab graphicTab;
     private final Tab htmlSourceTab;
-    private final TextArea htmlSourceArea;
+    private final WebView htmlSourceWebView;
+    private final ComboBox<String> sourceBlockSelector;
 
     private final ToggleGroup toolToggleGroup;
     private final Label pageLabel;
@@ -133,6 +148,7 @@ public final class MainViewController {
     private Region selectedNode;
     private boolean autoFitZoomOnNextLoad;
     private int autoFitPendingAttempts;
+    private String latestGeneratedHtmlSource;
 
     private double currentPagePixelWidth;
     private double currentPagePixelHeight;
@@ -156,7 +172,8 @@ public final class MainViewController {
         this.workspaceTabPane = new TabPane();
         this.graphicTab = new Tab("Graphic Mode");
         this.htmlSourceTab = new Tab("HTML Source");
-        this.htmlSourceArea = new TextArea();
+        this.htmlSourceWebView = new WebView();
+        this.sourceBlockSelector = new ComboBox<>();
 
         this.toolToggleGroup = new ToggleGroup();
         this.pageLabel = new Label("Page -/-");
@@ -194,6 +211,7 @@ public final class MainViewController {
         this.currentPagePixelHeight = DEFAULT_CANVAS_HEIGHT;
         this.autoFitZoomOnNextLoad = false;
         this.autoFitPendingAttempts = 0;
+        this.latestGeneratedHtmlSource = "<!-- Open a PDF or HTML project first -->";
 
         configureCanvas();
         configureActions();
@@ -286,6 +304,15 @@ public final class MainViewController {
 
         exportDpiCombo.getItems().addAll(150, 200, 300, 600);
         exportDpiCombo.setValue(300);
+        sourceBlockSelector.getItems().addAll(
+                SOURCE_BLOCK_FULL,
+                SOURCE_BLOCK_HEAD,
+                SOURCE_BLOCK_STYLE,
+                SOURCE_BLOCK_BODY,
+                SOURCE_BLOCK_METADATA
+        );
+        sourceBlockSelector.setValue(SOURCE_BLOCK_FULL);
+        sourceBlockSelector.valueProperty().addListener((obs, oldValue, newValue) -> updateHtmlSourceView());
 
         selectedElementIdField.setPromptText("Unique element ID");
         selectedElementTextField.setPromptText("Text for selected element");
@@ -316,19 +343,29 @@ public final class MainViewController {
                 statusLabel.setText("Active tool: " + activeTool.name());
             }
         });
+
+        canvasScrollPane.addEventFilter(ScrollEvent.SCROLL, this::handleZoomScroll);
     }
 
     private Node buildWorkspacePane() {
         graphicTab.setClosable(false);
         graphicTab.setContent(canvasScrollPane);
 
-        htmlSourceArea.setEditable(false);
-        htmlSourceArea.setWrapText(false);
-        htmlSourceArea.setPromptText("Generated HTML will appear here.");
-        htmlSourceArea.setStyle("-fx-font-family: 'Consolas'; -fx-font-size: 12px;");
+        Label sourceBlockLabel = new Label("Code block");
+        sourceBlockLabel.getStyleClass().add("status-meta");
+
+        HBox sourceToolbar = new HBox(8, sourceBlockLabel, sourceBlockSelector);
+        sourceToolbar.setPadding(new Insets(8, 10, 8, 10));
+        sourceToolbar.setAlignment(Pos.CENTER_LEFT);
+        sourceToolbar.getStyleClass().add("toolbar");
+
+        BorderPane sourcePane = new BorderPane();
+        sourcePane.setTop(sourceToolbar);
+        sourcePane.setCenter(htmlSourceWebView);
+        updateHtmlSourceView();
 
         htmlSourceTab.setClosable(false);
-        htmlSourceTab.setContent(htmlSourceArea);
+        htmlSourceTab.setContent(sourcePane);
 
         workspaceTabPane.getTabs().setAll(graphicTab, htmlSourceTab);
         return workspaceTabPane;
@@ -340,6 +377,21 @@ public final class MainViewController {
 
     private void zoomOut() {
         zoomSlider.setValue(clamp(zoomSlider.getValue() - ZOOM_STEP_PERCENT, zoomSlider.getMin(), zoomSlider.getMax()));
+    }
+
+    private void handleZoomScroll(ScrollEvent event) {
+        if (!event.isShortcutDown()) {
+            return;
+        }
+
+        double deltaY = event.getDeltaY();
+        if (deltaY > 0) {
+            zoomIn();
+            event.consume();
+        } else if (deltaY < 0) {
+            zoomOut();
+            event.consume();
+        }
     }
 
     private Node buildTopToolbar() {
@@ -1532,23 +1584,200 @@ public final class MainViewController {
 
     private void refreshHtmlSourcePreview() {
         if (currentProject == null) {
-            htmlSourceArea.setText("<!-- Open a PDF or HTML project first -->");
+            latestGeneratedHtmlSource = "<!-- Open a PDF or HTML project first -->";
+            updateHtmlSourceView();
             return;
         }
         try {
             int selectedDpi = exportDpiCombo.getValue() == null ? 300 : exportDpiCombo.getValue();
-            String htmlContent = htmlExportService.buildHtmlContent(
+            latestGeneratedHtmlSource = htmlExportService.buildHtmlContent(
                     currentProject,
                     selectedDpi,
                     false,
                     ExportOptions.defaultOptions()
             );
-            htmlSourceArea.setText(htmlContent);
-            htmlSourceArea.positionCaret(0);
+            updateHtmlSourceView();
         } catch (Exception ex) {
             LOGGER.log(Level.SEVERE, "Error generating HTML source preview", ex);
-            htmlSourceArea.setText("<!-- Error generating HTML source: " + ex.getMessage() + " -->");
+            latestGeneratedHtmlSource = "<!-- Error generating HTML source: " + ex.getMessage() + " -->";
+            updateHtmlSourceView();
         }
+    }
+
+    /**
+     * Actualiza el contenido mostrado en el visor de código con resaltado HTML/CSS.
+     */
+    private void updateHtmlSourceView() {
+        String source = latestGeneratedHtmlSource == null ? "" : latestGeneratedHtmlSource;
+        String selectedBlock = Optional.ofNullable(sourceBlockSelector.getValue()).orElse(SOURCE_BLOCK_FULL);
+        String blockContent = extractHtmlBlock(source, selectedBlock);
+        String highlightedHtml = buildHighlightedSourceDocument(blockContent, selectedBlock);
+        htmlSourceWebView.getEngine().loadContent(highlightedHtml, "text/html");
+    }
+
+    /**
+     * Extrae una sección del documento HTML según el bloque seleccionado.
+     *
+     * @param htmlSource     código HTML completo.
+     * @param selectedBlock  bloque seleccionado en UI.
+     * @return contenido textual del bloque solicitado.
+     */
+    private String extractHtmlBlock(String htmlSource, String selectedBlock) {
+        return switch (selectedBlock) {
+            case SOURCE_BLOCK_HEAD -> extractFirstGroup(HTML_HEAD_PATTERN, htmlSource, "<!-- HEAD not found -->");
+            case SOURCE_BLOCK_STYLE -> extractAllMatches(HTML_STYLE_PATTERN, htmlSource, "<!-- STYLE not found -->");
+            case SOURCE_BLOCK_BODY -> extractFirstGroup(HTML_BODY_PATTERN, htmlSource, "<!-- BODY not found -->");
+            case SOURCE_BLOCK_METADATA -> extractFullMatch(
+                    OVERLAY_METADATA_PATTERN,
+                    htmlSource,
+                    "<!-- Metadata block not found -->"
+            );
+            default -> htmlSource;
+        };
+    }
+
+    /**
+     * Obtiene el primer grupo capturado por un patrón.
+     *
+     * @param pattern      patrón de búsqueda.
+     * @param content      contenido fuente.
+     * @param fallbackText texto por defecto cuando no hay coincidencias.
+     * @return bloque capturado o texto fallback.
+     */
+    private String extractFirstGroup(Pattern pattern, String content, String fallbackText) {
+        Matcher matcher = pattern.matcher(content);
+        if (!matcher.find() || matcher.groupCount() < 1) {
+            return fallbackText;
+        }
+        return matcher.group(1).trim();
+    }
+
+    /**
+     * Concatena todas las coincidencias completas de un patrón.
+     *
+     * @param pattern      patrón de búsqueda.
+     * @param content      contenido fuente.
+     * @param fallbackText texto por defecto cuando no hay coincidencias.
+     * @return texto concatenado con salto de línea entre coincidencias.
+     */
+    private String extractAllMatches(Pattern pattern, String content, String fallbackText) {
+        Matcher matcher = pattern.matcher(content);
+        List<String> matches = new ArrayList<>();
+        while (matcher.find()) {
+            matches.add(matcher.group().trim());
+        }
+        if (matches.isEmpty()) {
+            return fallbackText;
+        }
+        return String.join("\n\n", matches);
+    }
+
+    /**
+     * Obtiene la primera coincidencia completa de un patrón.
+     *
+     * @param pattern      patrón de búsqueda.
+     * @param content      contenido fuente.
+     * @param fallbackText texto por defecto cuando no hay coincidencias.
+     * @return coincidencia completa o fallback.
+     */
+    private String extractFullMatch(Pattern pattern, String content, String fallbackText) {
+        Matcher matcher = pattern.matcher(content);
+        if (!matcher.find()) {
+            return fallbackText;
+        }
+        return matcher.group().trim();
+    }
+
+    /**
+     * Construye el documento HTML mostrado dentro del WebView para presentar código coloreado.
+     *
+     * @param sourceCode    bloque de código a renderizar.
+     * @param selectedBlock nombre del bloque activo.
+     * @return documento HTML listo para cargar en el WebView.
+     */
+    private String buildHighlightedSourceDocument(String sourceCode, String selectedBlock) {
+        String escaped = escapeHtml(sourceCode);
+        String highlighted = applyBasicSyntaxHighlight(escaped);
+        String title = "Block: " + escapeHtml(selectedBlock);
+        return """
+                <!doctype html>
+                <html>
+                <head>
+                  <meta charset="UTF-8">
+                  <style>
+                    :root {
+                      color-scheme: light;
+                    }
+                    body {
+                      margin: 0;
+                      background: #ffffff;
+                      color: #212529;
+                      font-family: Consolas, Menlo, Monaco, monospace;
+                    }
+                    .header {
+                      position: sticky;
+                      top: 0;
+                      z-index: 1;
+                      padding: 8px 12px;
+                      background: #f3f5f7;
+                      border-bottom: 1px solid #dde2e7;
+                      color: #445061;
+                      font-size: 12px;
+                      font-weight: 600;
+                    }
+                    pre {
+                      margin: 0;
+                      padding: 12px;
+                      line-height: 1.35;
+                      font-size: 12px;
+                      white-space: pre;
+                      overflow: auto;
+                    }
+                    .tok-tag { color: #0033b3; }
+                    .tok-attr { color: #7a3e00; }
+                    .tok-val { color: #067d17; }
+                    .tok-comment { color: #6f7b8a; font-style: italic; }
+                    .tok-jinja { color: #8a2be2; font-weight: 600; }
+                  </style>
+                </head>
+                <body>
+                  <div class="header">%s</div>
+                  <pre>%s</pre>
+                </body>
+                </html>
+                """.formatted(title, highlighted);
+    }
+
+    /**
+     * Escapa caracteres especiales para representar el código fuente en HTML.
+     *
+     * @param rawSource texto original.
+     * @return texto escapado para `pre`.
+     */
+    private String escapeHtml(String rawSource) {
+        return rawSource
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
+    }
+
+    /**
+     * Aplica resaltado básico para etiquetas HTML, atributos, valores, comentarios y bloques Jinja.
+     *
+     * @param escapedSource código escapado.
+     * @return código escapado con etiquetas `span` para colores.
+     */
+    private String applyBasicSyntaxHighlight(String escapedSource) {
+        String highlighted = escapedSource;
+        highlighted = highlighted.replaceAll("(?s)&lt;!--.*?--&gt;", "<span class=\"tok-comment\">$0</span>");
+        highlighted = highlighted.replaceAll("\\{\\%.*?\\%\\}", "<span class=\"tok-jinja\">$0</span>");
+        highlighted = highlighted.replaceAll("\\{\\{.*?\\}\\}", "<span class=\"tok-jinja\">$0</span>");
+        highlighted = highlighted.replaceAll("(&lt;/?)([a-zA-Z][a-zA-Z0-9:_-]*)", "$1<span class=\"tok-tag\">$2</span>");
+        highlighted = highlighted.replaceAll(
+                "([a-zA-Z_:][-a-zA-Z0-9_:.]*)(\\s*=\\s*)(\"[^\"]*\"|'[^']*')",
+                "<span class=\"tok-attr\">$1</span>$2<span class=\"tok-val\">$3</span>"
+        );
+        return highlighted;
     }
 
     private Optional<SaveExportSelection> showExportOptionsDialog() {

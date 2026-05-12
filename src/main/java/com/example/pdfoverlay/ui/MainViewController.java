@@ -11,6 +11,7 @@ import com.example.pdfoverlay.service.HtmlExportService;
 import com.example.pdfoverlay.service.PdfService;
 import com.example.pdfoverlay.service.PrintService;
 import javafx.application.Platform;
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
@@ -29,6 +30,9 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
 import javafx.scene.control.Slider;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToggleButton;
@@ -54,6 +58,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -74,7 +80,8 @@ public final class MainViewController {
     private static final float PREVIEW_DPI = 180.0f;
     private static final int DEFAULT_TABLE_COLUMNS = 4;
     private static final int MAX_TABLE_COLUMNS = 12;
-    private static final double ZOOM_STEP = 0.1d;
+    private static final double ZOOM_STEP_PERCENT = 10.0d;
+    private static final int AUTO_FIT_MAX_ATTEMPTS = 16;
 
     private final Stage ownerStage;
     private final PdfService pdfService;
@@ -86,6 +93,10 @@ public final class MainViewController {
     private final Pane overlayPane;
     private final StackPane pageStack;
     private final ScrollPane canvasScrollPane;
+    private final TabPane workspaceTabPane;
+    private final Tab graphicTab;
+    private final Tab htmlSourceTab;
+    private final TextArea htmlSourceArea;
 
     private final ToggleGroup toolToggleGroup;
     private final Label pageLabel;
@@ -112,6 +123,7 @@ public final class MainViewController {
     private final Button deleteSelectedButton;
 
     private final Map<String, Region> elementNodes;
+    private final Deque<DeletedElementSnapshot> deletedElementsHistory;
 
     private EditorTool activeTool;
     private OverlayProject currentProject;
@@ -119,6 +131,8 @@ public final class MainViewController {
     private int currentPageIndex;
     private OverlayElement selectedElement;
     private Region selectedNode;
+    private boolean autoFitZoomOnNextLoad;
+    private int autoFitPendingAttempts;
 
     private double currentPagePixelWidth;
     private double currentPagePixelHeight;
@@ -139,6 +153,10 @@ public final class MainViewController {
         this.overlayPane = new Pane();
         this.pageStack = new StackPane();
         this.canvasScrollPane = new ScrollPane();
+        this.workspaceTabPane = new TabPane();
+        this.graphicTab = new Tab("Graphic Mode");
+        this.htmlSourceTab = new Tab("HTML Source");
+        this.htmlSourceArea = new TextArea();
 
         this.toolToggleGroup = new ToggleGroup();
         this.pageLabel = new Label("Page -/-");
@@ -154,7 +172,7 @@ public final class MainViewController {
         this.tableRowsCombo = new ComboBox<>();
         this.applyTableConfigButton = new Button("Apply table config");
         this.exportDpiCombo = new ComboBox<>();
-        this.zoomSlider = new Slider(0.5, 3.0, 1.0);
+        this.zoomSlider = new Slider(0.0, 300.0, 100.0);
 
         this.openHtmlButton = new Button("Open HTML");
         this.exportButton = new Button("Save HTML As...");
@@ -165,6 +183,7 @@ public final class MainViewController {
         this.deleteSelectedButton = new Button("Delete selected");
 
         this.elementNodes = new HashMap<>();
+        this.deletedElementsHistory = new ArrayDeque<>();
         this.selectedElementIdField.setDisable(true);
         this.applyElementIdButton.setDisable(true);
 
@@ -173,13 +192,15 @@ public final class MainViewController {
         this.currentHtmlPath = null;
         this.currentPagePixelWidth = DEFAULT_CANVAS_WIDTH;
         this.currentPagePixelHeight = DEFAULT_CANVAS_HEIGHT;
+        this.autoFitZoomOnNextLoad = false;
+        this.autoFitPendingAttempts = 0;
 
         configureCanvas();
         configureActions();
         zoomValueLabel.setText(formatZoomPercentage(zoomSlider.getValue()));
 
         root.setTop(buildTopToolbar());
-        root.setCenter(canvasScrollPane);
+        root.setCenter(buildWorkspacePane());
         root.setRight(buildInspectorPanel());
         root.setBottom(buildStatusBar());
         root.setFocusTraversable(true);
@@ -238,6 +259,10 @@ public final class MainViewController {
                         zoomOut();
                         event.consume();
                     }
+                    case Z -> {
+                        undoLastDeletion();
+                        event.consume();
+                    }
                     case EQUALS -> {
                         if (event.isShiftDown()) {
                             zoomIn();
@@ -252,10 +277,11 @@ public final class MainViewController {
         });
 
         zoomSlider.valueProperty().addListener((obs, oldValue, newValue) -> {
-            double scale = newValue.doubleValue();
+            double percent = newValue.doubleValue();
+            double scale = Math.max(0.0d, percent / 100.0d);
             pageStack.setScaleX(scale);
             pageStack.setScaleY(scale);
-            zoomValueLabel.setText(formatZoomPercentage(scale));
+            zoomValueLabel.setText(formatZoomPercentage(percent));
         });
 
         exportDpiCombo.getItems().addAll(150, 200, 300, 600);
@@ -270,6 +296,12 @@ public final class MainViewController {
         tableRowsCombo.getItems().addAll(1, 4);
         tableRowsCombo.setValue(1);
         applyTableConfigButton.setOnAction(event -> applySelectedTableConfiguration());
+
+        workspaceTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
+            if (newTab == htmlSourceTab) {
+                refreshHtmlSourcePreview();
+            }
+        });
 
         toolToggleGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
             if (newToggle == null) {
@@ -286,12 +318,28 @@ public final class MainViewController {
         });
     }
 
+    private Node buildWorkspacePane() {
+        graphicTab.setClosable(false);
+        graphicTab.setContent(canvasScrollPane);
+
+        htmlSourceArea.setEditable(false);
+        htmlSourceArea.setWrapText(false);
+        htmlSourceArea.setPromptText("Generated HTML will appear here.");
+        htmlSourceArea.setStyle("-fx-font-family: 'Consolas'; -fx-font-size: 12px;");
+
+        htmlSourceTab.setClosable(false);
+        htmlSourceTab.setContent(htmlSourceArea);
+
+        workspaceTabPane.getTabs().setAll(graphicTab, htmlSourceTab);
+        return workspaceTabPane;
+    }
+
     private void zoomIn() {
-        zoomSlider.setValue(clamp(zoomSlider.getValue() + ZOOM_STEP, zoomSlider.getMin(), zoomSlider.getMax()));
+        zoomSlider.setValue(clamp(zoomSlider.getValue() + ZOOM_STEP_PERCENT, zoomSlider.getMin(), zoomSlider.getMax()));
     }
 
     private void zoomOut() {
-        zoomSlider.setValue(clamp(zoomSlider.getValue() - ZOOM_STEP, zoomSlider.getMin(), zoomSlider.getMax()));
+        zoomSlider.setValue(clamp(zoomSlider.getValue() - ZOOM_STEP_PERCENT, zoomSlider.getMin(), zoomSlider.getMax()));
     }
 
     private Node buildTopToolbar() {
@@ -484,6 +532,8 @@ public final class MainViewController {
             Path pdfPath = selectedFile.toPath();
             PdfDocumentMetadata metadata = pdfService.loadMetadata(pdfPath);
             currentProject = new OverlayProject(pdfPath, metadata);
+            autoFitZoomOnNextLoad = true;
+            autoFitPendingAttempts = AUTO_FIT_MAX_ATTEMPTS;
             currentHtmlPath = null;
             currentPageIndex = 0;
             clearSelection();
@@ -513,6 +563,8 @@ public final class MainViewController {
             OverlayProject loadedProject = htmlExportService.loadProjectFromHtml(htmlPath);
             currentProject = loadedProject;
             normalizeElementIdsInProject();
+            autoFitZoomOnNextLoad = true;
+            autoFitPendingAttempts = AUTO_FIT_MAX_ATTEMPTS;
             currentHtmlPath = htmlPath;
             currentPageIndex = 0;
             clearSelection();
@@ -554,6 +606,9 @@ public final class MainViewController {
             renderOverlayElements();
             updatePageLabel();
             updateButtonsState();
+            if (autoFitZoomOnNextLoad) {
+                scheduleAutoFitZoom();
+            }
         } catch (Exception ex) {
             LOGGER.log(Level.SEVERE, "Unable to render page", ex);
             showError("Cannot render page", ex.getMessage());
@@ -1052,14 +1107,47 @@ public final class MainViewController {
             return;
         }
 
+        OverlayElement removedCopy = selectedElement.copy();
+        int removedPageIndex = currentPageIndex;
         OverlayPage page = currentProject.getOverlayPage(currentPageIndex);
         boolean removed = page.removeElement(selectedElement.getId());
         Region node = elementNodes.remove(selectedElement.getId());
         if (removed && node != null) {
+            deletedElementsHistory.push(new DeletedElementSnapshot(removedPageIndex, removedCopy));
             overlayPane.getChildren().remove(node);
             statusLabel.setText("Element removed");
         }
         clearSelection();
+    }
+
+    private void undoLastDeletion() {
+        if (currentProject == null) {
+            statusLabel.setText("Open a PDF first");
+            return;
+        }
+        if (deletedElementsHistory.isEmpty()) {
+            statusLabel.setText("Nothing to undo");
+            return;
+        }
+
+        DeletedElementSnapshot snapshot = deletedElementsHistory.pop();
+        OverlayElement restoredElement = snapshot.element().copy();
+        if (!isElementIdAvailable(restoredElement.getId(), null)) {
+            restoredElement.setId(generateNextElementId(restoredElement.getType()));
+        }
+
+        OverlayPage page = currentProject.getOverlayPage(snapshot.pageIndex());
+        page.addElement(restoredElement);
+
+        if (snapshot.pageIndex() == currentPageIndex) {
+            Region node = createVisualNode(restoredElement);
+            overlayPane.getChildren().add(node);
+            elementNodes.put(restoredElement.getId(), node);
+            selectElement(restoredElement, node);
+        } else {
+            clearSelection();
+        }
+        statusLabel.setText("Deletion undone");
     }
 
     private void updateElementFromNode(OverlayElement element, Region node) {
@@ -1115,8 +1203,56 @@ public final class MainViewController {
         );
     }
 
-    private String formatZoomPercentage(double zoomScale) {
-        return String.format(Locale.US, "%.0f%%", zoomScale * 100.0d);
+    private String formatZoomPercentage(double zoomPercent) {
+        return String.format(Locale.US, "%.0f%%", zoomPercent);
+    }
+
+    private void scheduleAutoFitZoom() {
+        Platform.runLater(this::applyAutoFitZoomIfPossible);
+    }
+
+    private void applyAutoFitZoomIfPossible() {
+        if (!autoFitZoomOnNextLoad) {
+            return;
+        }
+
+        if (applyFitZoomToViewport()) {
+            autoFitZoomOnNextLoad = false;
+            autoFitPendingAttempts = 0;
+            return;
+        }
+
+        if (autoFitPendingAttempts > 0) {
+            autoFitPendingAttempts--;
+            Platform.runLater(this::applyAutoFitZoomIfPossible);
+            return;
+        }
+
+        autoFitZoomOnNextLoad = false;
+    }
+
+    private boolean applyFitZoomToViewport() {
+        if (currentPagePixelWidth <= 0 || currentPagePixelHeight <= 0) {
+            return false;
+        }
+
+        Bounds viewportBounds = canvasScrollPane.getViewportBounds();
+        double viewportWidth = viewportBounds == null ? 0.0d : viewportBounds.getWidth();
+        double viewportHeight = viewportBounds == null ? 0.0d : viewportBounds.getHeight();
+        if (viewportWidth <= 0 || viewportHeight <= 0) {
+            return false;
+        }
+
+        double fitScaleX = viewportWidth / currentPagePixelWidth;
+        double fitScaleY = viewportHeight / currentPagePixelHeight;
+        double fitScale = Math.min(fitScaleX, fitScaleY);
+        if (!Double.isFinite(fitScale) || fitScale <= 0) {
+            return false;
+        }
+
+        double fitPercent = fitScale * 100.0d;
+        zoomSlider.setValue(clamp(fitPercent, zoomSlider.getMin(), zoomSlider.getMax()));
+        return true;
     }
 
     private void normalizeElementIdsInProject() {
@@ -1315,8 +1451,8 @@ public final class MainViewController {
             return;
         }
 
-        Optional<ExportOptions> exportOptions = showExportOptionsDialog();
-        if (exportOptions.isEmpty()) {
+        Optional<SaveExportSelection> exportSelection = showExportOptionsDialog();
+        if (exportSelection.isEmpty()) {
             statusLabel.setText("Export cancelled");
             return;
         }
@@ -1332,11 +1468,11 @@ public final class MainViewController {
                     currentProject,
                     targetHtmlPath,
                     selectedDpi,
-                    false,
-                    exportOptions.get()
+                    exportSelection.get().includePdfBackground(),
+                    exportSelection.get().exportOptions()
             );
             currentHtmlPath = htmlPath;
-            statusLabel.setText("Export completed (overlay only): " + htmlPath.getFileName());
+            statusLabel.setText("Export completed: " + htmlPath.getFileName());
             Alert info = new Alert(Alert.AlertType.INFORMATION, "HTML generated at:\n" + htmlPath, ButtonType.OK);
             info.setHeaderText("Export completed");
             info.initOwner(ownerStage);
@@ -1394,8 +1530,29 @@ public final class MainViewController {
         }
     }
 
-    private Optional<ExportOptions> showExportOptionsDialog() {
-        Dialog<ExportOptions> dialog = new Dialog<>();
+    private void refreshHtmlSourcePreview() {
+        if (currentProject == null) {
+            htmlSourceArea.setText("<!-- Open a PDF or HTML project first -->");
+            return;
+        }
+        try {
+            int selectedDpi = exportDpiCombo.getValue() == null ? 300 : exportDpiCombo.getValue();
+            String htmlContent = htmlExportService.buildHtmlContent(
+                    currentProject,
+                    selectedDpi,
+                    false,
+                    ExportOptions.defaultOptions()
+            );
+            htmlSourceArea.setText(htmlContent);
+            htmlSourceArea.positionCaret(0);
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Error generating HTML source preview", ex);
+            htmlSourceArea.setText("<!-- Error generating HTML source: " + ex.getMessage() + " -->");
+        }
+    }
+
+    private Optional<SaveExportSelection> showExportOptionsDialog() {
+        Dialog<SaveExportSelection> dialog = new Dialog<>();
         dialog.setTitle("Export options");
         dialog.setHeaderText("Select HTML export options");
         dialog.initOwner(ownerStage);
@@ -1403,6 +1560,8 @@ public final class MainViewController {
         ButtonType exportButtonType = new ButtonType("Export", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(exportButtonType, ButtonType.CANCEL);
 
+        CheckBox includePdfBackgroundCheck = new CheckBox("General: embed PDF background image");
+        includePdfBackgroundCheck.setSelected(false);
         CheckBox exportFontCheck = new CheckBox("General: export font");
         exportFontCheck.setSelected(true);
         CheckBox exportTableColorsCheck = new CheckBox("Tables: export colors");
@@ -1414,6 +1573,7 @@ public final class MainViewController {
 
         VBox content = new VBox(
                 8,
+                includePdfBackgroundCheck,
                 exportFontCheck,
                 exportTableColorsCheck,
                 exportTableBordersCheck,
@@ -1424,11 +1584,14 @@ public final class MainViewController {
 
         dialog.setResultConverter(buttonType -> {
             if (buttonType == exportButtonType) {
-                return new ExportOptions(
-                        exportFontCheck.isSelected(),
-                        exportTableColorsCheck.isSelected(),
-                        exportTableBordersCheck.isSelected(),
-                        exportTextBordersCheck.isSelected()
+                return new SaveExportSelection(
+                        includePdfBackgroundCheck.isSelected(),
+                        new ExportOptions(
+                                exportFontCheck.isSelected(),
+                                exportTableColorsCheck.isSelected(),
+                                exportTableBordersCheck.isSelected(),
+                                exportTextBordersCheck.isSelected()
+                        )
                 );
             }
             return null;
@@ -1497,5 +1660,17 @@ public final class MainViewController {
         private double dragStartMouseY;
         private double dragStartNodeX;
         private double dragStartNodeY;
+    }
+
+    /**
+     * Snapshot mínimo para restaurar un elemento eliminado.
+     */
+    private record DeletedElementSnapshot(int pageIndex, OverlayElement element) {
+    }
+
+    /**
+     * Selección de opciones específicas para guardado de HTML.
+     */
+    private record SaveExportSelection(boolean includePdfBackground, ExportOptions exportOptions) {
     }
 }

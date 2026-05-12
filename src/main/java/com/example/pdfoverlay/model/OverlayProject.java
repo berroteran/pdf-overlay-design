@@ -12,6 +12,8 @@ public final class OverlayProject {
     private final Path pdfPath;
     private final PdfDocumentMetadata metadata;
     private final Map<Integer, OverlayPage> pages;
+    private DocumentStatus documentStatus;
+    private boolean statusWatermarkEnabled;
 
     /**
      * Construye un proyecto inicial creando una capa por página PDF.
@@ -23,6 +25,8 @@ public final class OverlayProject {
         this.pdfPath = Objects.requireNonNull(pdfPath, "pdfPath is required");
         this.metadata = Objects.requireNonNull(metadata, "metadata is required");
         this.pages = new LinkedHashMap<>();
+        this.documentStatus = DocumentStatus.DRAFT;
+        this.statusWatermarkEnabled = false;
         for (PdfPageMetadata page : metadata.getPages()) {
             pages.put(page.pageIndex(), new OverlayPage(page.pageIndex()));
         }
@@ -55,5 +59,36 @@ public final class OverlayProject {
         }
         return page;
     }
-}
 
+    /**
+     * @return estado del documento para marca de agua.
+     */
+    public DocumentStatus getDocumentStatus() {
+        return documentStatus;
+    }
+
+    /**
+     * Actualiza el estado del documento.
+     *
+     * @param documentStatus estado nuevo.
+     */
+    public void setDocumentStatus(DocumentStatus documentStatus) {
+        this.documentStatus = Objects.requireNonNull(documentStatus, "documentStatus is required");
+    }
+
+    /**
+     * @return `true` cuando la marca de agua de estado está activa.
+     */
+    public boolean isStatusWatermarkEnabled() {
+        return statusWatermarkEnabled;
+    }
+
+    /**
+     * Activa o desactiva la marca de agua de estado.
+     *
+     * @param statusWatermarkEnabled bandera de activación.
+     */
+    public void setStatusWatermarkEnabled(boolean statusWatermarkEnabled) {
+        this.statusWatermarkEnabled = statusWatermarkEnabled;
+    }
+}

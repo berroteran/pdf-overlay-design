@@ -1,5 +1,6 @@
 package com.example.pdfoverlay.service;
 
+import com.example.pdfoverlay.model.DocumentStatus;
 import com.example.pdfoverlay.model.OverlayElement;
 import com.example.pdfoverlay.model.OverlayElementType;
 import com.example.pdfoverlay.model.OverlayPage;
@@ -121,7 +122,7 @@ public final class HtmlExportService {
         }
 
         StringBuilder html = new StringBuilder();
-        html.append(buildHtmlHeader(exportOptions));
+        html.append(buildHtmlHeader(project, exportOptions));
 
         for (PdfPageMetadata pageMetadata : project.getMetadata().getPages()) {
             int pageIndex = pageMetadata.pageIndex();
@@ -157,7 +158,33 @@ public final class HtmlExportService {
         return parseProject(metadata);
     }
 
-    private String buildHtmlHeader(ExportOptions options) {
+    private String buildHtmlHeader(OverlayProject project, ExportOptions options) {
+        DocumentStatus documentStatus = project.getDocumentStatus();
+        boolean statusWatermarkEnabled = project.isStatusWatermarkEnabled();
+        String statusClass = statusWatermarkEnabled ? documentStatus.getBodyClass() : "";
+        String statusText = escapeHtml(documentStatus.getWatermarkText());
+        String watermarkCss = statusWatermarkEnabled
+                ? """
+                        body.status-draft::before,
+                        body.status-voided::before {
+                            position: fixed;
+                            top: 50%%;
+                            left: 50%%;
+                            transform: translate(-50%%, -50%%) rotate(-35deg);
+                            font-size: clamp(72px, 16vw, 190px);
+                            font-weight: 700;
+                            color: rgba(90, 90, 90, 0.18);
+                            letter-spacing: 0.08em;
+                            pointer-events: none;
+                            user-select: none;
+                            z-index: 9999;
+                            white-space: nowrap;
+                        }
+                        body.status-draft::before { content: "%s"; }
+                        body.status-voided::before { content: "ANULADO"; }
+                    """.formatted(statusText)
+                : "";
+        String bodyAttributes = statusWatermarkEnabled ? " class=\"" + statusClass + "\"" : "";
         String fontFamily = options.exportFont() ? "font-family: \"Segoe UI\", Tahoma, sans-serif;" : "";
         String fontSize10 = options.exportFont() ? "font-size: 10pt;" : "";
         String fontSize9 = options.exportFont() ? "font-size: 9pt;" : "";
@@ -186,6 +213,7 @@ public final class HtmlExportService {
                             background: #f0f2f4;
                             %s
                         }
+                        %s
                         table.print-page {
                             position: relative;
                             page-break-after: always;
@@ -286,9 +314,10 @@ public final class HtmlExportService {
                         }
                     </style>
                 </head>
-                <body>
+                <body%s>
                 """.formatted(
                 fontFamily,
+                watermarkCss,
                 textFieldBorder,
                 fontSize10,
                 fontSize10,
@@ -298,7 +327,8 @@ public final class HtmlExportService {
                 fontSize10,
                 tableCellBorder,
                 tableCellBackground,
-                fontSize10
+                fontSize10,
+                bodyAttributes
         );
     }
 
@@ -429,6 +459,10 @@ public final class HtmlExportService {
         StringBuilder metadata = new StringBuilder();
         metadata.append("\n<!-- ").append(METADATA_BEGIN).append('\n');
         metadata.append("VERSION=1\n");
+        metadata.append("DOC_STATUS_ENABLED=").append(project.isStatusWatermarkEnabled()).append('\n');
+        if (project.isStatusWatermarkEnabled()) {
+            metadata.append("DOC_STATUS=").append(project.getDocumentStatus().name()).append('\n');
+        }
         metadata.append("PDF_PATH_B64=").append(base64Encode(project.getPdfPath().toAbsolutePath().toString())).append('\n');
 
         for (PdfPageMetadata pageMetadata : project.getMetadata().getPages()) {
@@ -478,6 +512,8 @@ public final class HtmlExportService {
 
     private OverlayProject parseProject(String metadataBlock) {
         Path pdfPath = null;
+        DocumentStatus documentStatus = DocumentStatus.DRAFT;
+        boolean statusWatermarkEnabled = false;
         List<PdfPageMetadata> pagesMetadata = new ArrayList<>();
         Map<Integer, OverlayPage> overlayPages = new LinkedHashMap<>();
 
@@ -491,6 +527,19 @@ public final class HtmlExportService {
             if (line.startsWith("PDF_PATH_B64=")) {
                 String encodedPath = line.substring("PDF_PATH_B64=".length());
                 pdfPath = Path.of(base64Decode(encodedPath));
+                continue;
+            }
+
+            if (line.startsWith("DOC_STATUS=")) {
+                String statusValue = line.substring("DOC_STATUS=".length());
+                documentStatus = DocumentStatus.fromMetadataValue(statusValue);
+                statusWatermarkEnabled = true;
+                continue;
+            }
+
+            if (line.startsWith("DOC_STATUS_ENABLED=")) {
+                String enabledValue = line.substring("DOC_STATUS_ENABLED=".length()).strip();
+                statusWatermarkEnabled = Boolean.parseBoolean(enabledValue);
                 continue;
             }
 
@@ -553,6 +602,8 @@ public final class HtmlExportService {
 
         PdfDocumentMetadata documentMetadata = new PdfDocumentMetadata(pdfPath, pagesMetadata);
         OverlayProject project = new OverlayProject(pdfPath, documentMetadata);
+        project.setDocumentStatus(documentStatus);
+        project.setStatusWatermarkEnabled(statusWatermarkEnabled);
 
         for (Map.Entry<Integer, OverlayPage> entry : overlayPages.entrySet()) {
             OverlayPage targetPage = project.getOverlayPage(entry.getKey());

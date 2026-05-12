@@ -1,5 +1,6 @@
 package com.example.pdfoverlay.ui;
 
+import com.example.pdfoverlay.model.DocumentStatus;
 import com.example.pdfoverlay.model.OverlayElement;
 import com.example.pdfoverlay.model.OverlayElementType;
 import com.example.pdfoverlay.model.OverlayPage;
@@ -122,6 +123,8 @@ public final class MainViewController {
     private final TextField selectedElementIdField;
     private final Button applyElementIdButton;
     private final TextField selectedElementTextField;
+    private final CheckBox enableStatusWatermarkCheck;
+    private final ComboBox<DocumentStatus> documentStatusCombo;
     private final TextField tableWidthPercentField;
     private final TextField tableColumnWidthsField;
     private final ComboBox<Integer> tableRowsCombo;
@@ -184,6 +187,8 @@ public final class MainViewController {
         this.selectedElementIdField = new TextField();
         this.applyElementIdButton = new Button("Apply ID");
         this.selectedElementTextField = new TextField();
+        this.enableStatusWatermarkCheck = new CheckBox("Enable status watermark");
+        this.documentStatusCombo = new ComboBox<>();
         this.tableWidthPercentField = new TextField();
         this.tableColumnWidthsField = new TextField();
         this.tableRowsCombo = new ComboBox<>();
@@ -304,6 +309,33 @@ public final class MainViewController {
 
         exportDpiCombo.getItems().addAll(150, 200, 300, 600);
         exportDpiCombo.setValue(300);
+        documentStatusCombo.getItems().addAll(DocumentStatus.DRAFT, DocumentStatus.VOIDED);
+        documentStatusCombo.setValue(DocumentStatus.DRAFT);
+        documentStatusCombo.setDisable(true);
+        enableStatusWatermarkCheck.setSelected(false);
+        enableStatusWatermarkCheck.selectedProperty().addListener((obs, oldValue, newValue) -> {
+            documentStatusCombo.setDisable(!newValue);
+            if (currentProject == null) {
+                return;
+            }
+            currentProject.setStatusWatermarkEnabled(newValue);
+            statusLabel.setText(newValue
+                    ? "Status watermark enabled: " + currentProject.getDocumentStatus().getWatermarkText()
+                    : "Status watermark disabled");
+            if (workspaceTabPane.getSelectionModel().getSelectedItem() == htmlSourceTab) {
+                refreshHtmlSourcePreview();
+            }
+        });
+        documentStatusCombo.valueProperty().addListener((obs, oldValue, newValue) -> {
+            if (currentProject == null || newValue == null) {
+                return;
+            }
+            currentProject.setDocumentStatus(newValue);
+            statusLabel.setText("Document status: " + newValue.getWatermarkText());
+            if (workspaceTabPane.getSelectionModel().getSelectedItem() == htmlSourceTab) {
+                refreshHtmlSourcePreview();
+            }
+        });
         sourceBlockSelector.getItems().addAll(
                 SOURCE_BLOCK_FULL,
                 SOURCE_BLOCK_HEAD,
@@ -491,6 +523,10 @@ public final class MainViewController {
         VBox panel = new VBox(
                 10,
                 inspectorTitle,
+                new Label("Document status"),
+                enableStatusWatermarkCheck,
+                documentStatusCombo,
+                new Separator(),
                 new Label("Type"),
                 selectedElementTypeLabel,
                 new Label("ID"),
@@ -1495,6 +1531,16 @@ public final class MainViewController {
         nextPageButton.setDisable(!hasProject || currentProject != null
                 && currentPageIndex >= currentProject.getMetadata().pageCount() - 1);
         deleteSelectedButton.setDisable(selectedElement == null);
+        enableStatusWatermarkCheck.setDisable(!hasProject);
+        if (hasProject) {
+            enableStatusWatermarkCheck.setSelected(currentProject.isStatusWatermarkEnabled());
+            documentStatusCombo.setValue(currentProject.getDocumentStatus());
+            documentStatusCombo.setDisable(!currentProject.isStatusWatermarkEnabled());
+        } else {
+            enableStatusWatermarkCheck.setSelected(false);
+            documentStatusCombo.setValue(DocumentStatus.DRAFT);
+            documentStatusCombo.setDisable(true);
+        }
     }
 
     private void exportHtmlLayer() {

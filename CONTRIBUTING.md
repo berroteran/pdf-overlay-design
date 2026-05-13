@@ -6,6 +6,11 @@ Gracias por contribuir a **PDF Overlay Designer**.
 
 - **Omar Berroteran**
 
+## Licencia de contribuciones
+
+Al contribuir a este repositorio, aceptas que tus aportes se publiquen bajo
+la licencia **Apache License 2.0** del proyecto.
+
 ## Requisitos de entorno
 
 - JDK 21

@@ -8,6 +8,12 @@
     <version>1.0.0</version>
     <name>PDF Overlay Designer</name>
     <description>Editor de overlays HTML sobre PDF para impresión de formatos preimpresos.</description>
+    <inceptionYear>2026</inceptionYear>
+    <developers>
+        <developer>
+            <name>Omar Berroteran</name>
+        </developer>
+    </developers>
     <licenses>
         <license>
             <name>Apache License, Version 2.0</name>
@@ -24,7 +30,7 @@
         <junit.version>5.10.2</junit.version>
         <app.mainClass>com.example.pdfoverlay.Launcher</app.mainClass>
         <windows.installer.name>PDFOverlayDesigner</windows.installer.name>
-        <windows.installer.vendor>PDF Overlay Team</windows.installer.vendor>
+        <windows.installer.vendor>Omar Berroteran</windows.installer.vendor>
         <windows.installer.type>exe</windows.installer.type>
     </properties>
 

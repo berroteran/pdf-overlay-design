@@ -287,6 +287,7 @@ Para evitar error de runtime JavaFX faltante:
 ## Autoría
 
 - **Omar Berroteran**
+- Copyright © 2026 Omar Berroteran
 
 ---
 
@@ -296,3 +297,4 @@ Este proyecto está licenciado bajo **Apache-2.0**.
 
 - Texto legal completo: [LICENSE](./LICENSE)
 - Aviso del proyecto: [NOTICE](./NOTICE)
+- Guía de contribución: [CONTRIBUTING.md](./CONTRIBUTING.md)

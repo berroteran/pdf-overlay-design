@@ -44,13 +44,24 @@ jobs:
       - name: Build EXE installer with Maven profile
         run: mvn -B -DskipTests package -Pwindows-installer
 
+      - name: List generated artifacts
+        shell: powershell
+        run: |
+          Write-Host "Installer directory:"
+          if (Test-Path target/installer) {
+            Get-ChildItem -Path target/installer -Recurse | Format-Table -AutoSize
+          } else {
+            Write-Host "target/installer not found"
+          }
+          Write-Host "Target directory:"
+          Get-ChildItem -Path target | Format-Table -AutoSize
+
       - name: Upload CI artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
           path: |
             target/installer/*.exe
-            target/installer/*.msi
             target/*.jar
 
       - name: Publish release assets
@@ -61,7 +72,6 @@ jobs:
           append_body: true
           files: |
             target/installer/*.exe
-            target/installer/*.msi
             target/*.jar
           overwrite_files: true
           fail_on_unmatched_files: true

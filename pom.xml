@@ -8,6 +8,13 @@
     <version>1.0.0</version>
     <name>PDF Overlay Designer</name>
     <description>Editor de overlays HTML sobre PDF para impresión de formatos preimpresos.</description>
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

@@ -280,4 +280,7 @@ Para evitar error de runtime JavaFX faltante:
 
 ## Licencia
 
-Pendiente de definir en `LICENSE` (recomendado: MIT o Apache-2.0).
+Este proyecto está licenciado bajo **Apache-2.0**.
+
+- Texto legal completo: [LICENSE](./LICENSE)
+- Aviso del proyecto: [NOTICE](./NOTICE)

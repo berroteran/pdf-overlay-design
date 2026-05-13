@@ -278,6 +278,18 @@ Para evitar error de runtime JavaFX faltante:
 
 ---
 
+## Colaboración
+
+- Guía de contribución: [CONTRIBUTING.md](./CONTRIBUTING.md)
+
+---
+
+## Autoría
+
+- **Omar Berroteran**
+
+---
+
 ## Licencia
 
 Este proyecto está licenciado bajo **Apache-2.0**.

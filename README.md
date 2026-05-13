@@ -231,6 +231,23 @@ mvn test
 mvn -DskipTests package
 ```
 
+### Crear instalador para Windows (EXE)
+
+Prerequisitos:
+
+- JDK 21 (incluye `jpackage`)
+- WiX Toolset v3.x con `light.exe` y `candle.exe` en `PATH`
+
+Comando:
+
+```bash
+mvn -DskipTests package -Pwindows-installer
+```
+
+Salida esperada:
+
+- `target/installer/PDFOverlayDesigner-1.0.0.exe` (o versión correspondiente)
+
 ---
 
 ## IntelliJ IDEA

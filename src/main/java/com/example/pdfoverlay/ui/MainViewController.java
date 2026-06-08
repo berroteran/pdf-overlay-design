@@ -142,7 +142,9 @@ public final class MainViewController {
     private final TabPane workspaceTabPane;
     private final Tab graphicTab;
     private final Tab htmlSourceTab;
+    private final Tab finalSourceTab;
     private final WebView htmlSourceWebView;
+    private final WebView finalSourceWebView;
     private final ComboBox<String> sourceBlockSelector;
     private final ComboBox<UiTheme> themeSelector;
 
@@ -194,6 +196,7 @@ public final class MainViewController {
     private boolean autoFitZoomOnNextLoad;
     private int autoFitPendingAttempts;
     private String latestGeneratedHtmlSource;
+    private String latestFinalSource;
     private UiTheme activeTheme;
 
     private double currentPagePixelWidth;
@@ -226,7 +229,9 @@ public final class MainViewController {
         this.workspaceTabPane = new TabPane();
         this.graphicTab = new Tab("Graphic Mode");
         this.htmlSourceTab = new Tab("HTML Source");
+        this.finalSourceTab = new Tab("Final Source");
         this.htmlSourceWebView = new WebView();
+        this.finalSourceWebView = new WebView();
         this.sourceBlockSelector = new ComboBox<>();
         this.themeSelector = new ComboBox<>();
 
@@ -280,6 +285,7 @@ public final class MainViewController {
         this.autoFitZoomOnNextLoad = false;
         this.autoFitPendingAttempts = 0;
         this.latestGeneratedHtmlSource = "<!-- Open a PDF or HTML project first -->";
+        this.latestFinalSource = "<!-- Open a PDF or HTML project first -->";
         this.activeTheme = UiTheme.MODENA;
 
         configureCanvas();
@@ -571,6 +577,8 @@ public final class MainViewController {
                     : "Status watermark disabled");
             if (workspaceTabPane.getSelectionModel().getSelectedItem() == htmlSourceTab) {
                 refreshHtmlSourcePreview();
+            } else if (workspaceTabPane.getSelectionModel().getSelectedItem() == finalSourceTab) {
+                refreshFinalSourcePreview();
             }
         });
         documentStatusCombo.valueProperty().addListener((obs, oldValue, newValue) -> {
@@ -582,6 +590,8 @@ public final class MainViewController {
             statusLabel.setText("Document status: " + newValue.getWatermarkText());
             if (workspaceTabPane.getSelectionModel().getSelectedItem() == htmlSourceTab) {
                 refreshHtmlSourcePreview();
+            } else if (workspaceTabPane.getSelectionModel().getSelectedItem() == finalSourceTab) {
+                refreshFinalSourcePreview();
             }
         });
         sourceBlockSelector.getItems().addAll(
@@ -607,6 +617,8 @@ public final class MainViewController {
         workspaceTabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
             if (newTab == htmlSourceTab) {
                 refreshHtmlSourcePreview();
+            } else if (newTab == finalSourceTab) {
+                refreshFinalSourcePreview();
             }
         });
 
@@ -670,7 +682,23 @@ public final class MainViewController {
         htmlSourceTab.setClosable(false);
         htmlSourceTab.setContent(sourcePane);
 
-        workspaceTabPane.getTabs().setAll(graphicTab, htmlSourceTab);
+        Label finalSourceLabel = new Label("ERPNext export fragment");
+        finalSourceLabel.getStyleClass().add("status-meta");
+
+        HBox finalSourceToolbar = new HBox(8, finalSourceLabel);
+        finalSourceToolbar.setPadding(new Insets(8, 10, 8, 10));
+        finalSourceToolbar.setAlignment(Pos.CENTER_LEFT);
+        finalSourceToolbar.getStyleClass().add("toolbar");
+
+        BorderPane finalSourcePane = new BorderPane();
+        finalSourcePane.setTop(finalSourceToolbar);
+        finalSourcePane.setCenter(finalSourceWebView);
+        updateFinalSourceView();
+
+        finalSourceTab.setClosable(false);
+        finalSourceTab.setContent(finalSourcePane);
+
+        workspaceTabPane.getTabs().setAll(graphicTab, htmlSourceTab, finalSourceTab);
         return workspaceTabPane;
     }
 
@@ -1149,7 +1177,9 @@ public final class MainViewController {
             pageLabel.setText("Page -/-");
             documentSizeLabel.setText("Document size: -");
             latestGeneratedHtmlSource = "<!-- Open a PDF or HTML project first -->";
+            latestFinalSource = "<!-- Open a PDF or HTML project first -->";
             updateHtmlSourceView();
+            updateFinalSourceView();
             updateButtonsState();
             statusLabel.setText(message);
         } finally {
@@ -2820,6 +2850,16 @@ public final class MainViewController {
         }
         hasUnsavedChanges = true;
         updateButtonsState();
+        refreshActiveSourcePreview();
+    }
+
+    private void refreshActiveSourcePreview() {
+        Tab selectedTab = workspaceTabPane.getSelectionModel().getSelectedItem();
+        if (selectedTab == htmlSourceTab) {
+            refreshHtmlSourcePreview();
+        } else if (selectedTab == finalSourceTab) {
+            refreshFinalSourcePreview();
+        }
     }
 
     private void exportErpNextFragment() {
@@ -2984,6 +3024,27 @@ public final class MainViewController {
         }
     }
 
+    private void refreshFinalSourcePreview() {
+        if (currentProject == null) {
+            latestFinalSource = "<!-- Open a PDF or HTML project first -->";
+            updateFinalSourceView();
+            return;
+        }
+        try {
+            latestFinalSource = htmlExportService.buildEmbedHtmlFragment(
+                    currentProject,
+                    getSelectedExportDpi(),
+                    false,
+                    ExportOptions.defaultOptions()
+            );
+            updateFinalSourceView();
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Error generating final source preview", ex);
+            latestFinalSource = "<!-- Error generating final source: " + ex.getMessage() + " -->";
+            updateFinalSourceView();
+        }
+    }
+
     /**
      * Actualiza el contenido mostrado en el visor de código con resaltado HTML/CSS.
      */
@@ -2993,6 +3054,12 @@ public final class MainViewController {
         String blockContent = extractHtmlBlock(source, selectedBlock);
         String highlightedHtml = buildHighlightedSourceDocument(blockContent, selectedBlock);
         htmlSourceWebView.getEngine().loadContent(highlightedHtml, "text/html");
+    }
+
+    private void updateFinalSourceView() {
+        String source = latestFinalSource == null ? "" : latestFinalSource;
+        String plainHtml = buildPlainSourceDocument(source, "Final Source");
+        finalSourceWebView.getEngine().loadContent(plainHtml, "text/html");
     }
 
     /**
@@ -3151,6 +3218,67 @@ public final class MainViewController {
         );
     }
 
+    private String buildPlainSourceDocument(String sourceCode, String titleText) {
+        String escaped = escapeHtml(sourceCode);
+        String title = "Block: " + escapeHtml(titleText);
+        String bodyBackground = activeTheme != null && activeTheme.isDark() ? "#151a20" : "#ffffff";
+        String bodyColor = activeTheme != null && activeTheme.isDark() ? "#e7edf5" : "#212529";
+        String headerBackground = activeTheme != null && activeTheme.isDark() ? "#202833" : "#f3f5f7";
+        String headerBorder = activeTheme != null && activeTheme.isDark() ? "#4a5667" : "#dde2e7";
+        String headerColor = activeTheme != null && activeTheme.isDark() ? "#b8c7d9" : "#445061";
+        return """
+                <!doctype html>
+                <html>
+                <head>
+                  <meta charset="UTF-8">
+                  <style>
+                    :root {
+                      color-scheme: light;
+                    }
+                    body {
+                      margin: 0;
+                      background: %s;
+                      color: %s;
+                      font-family: Consolas, Menlo, Monaco, monospace;
+                    }
+                    .header {
+                      position: sticky;
+                      top: 0;
+                      z-index: 1;
+                      padding: 8px 12px;
+                      background: %s;
+                      border-bottom: 1px solid %s;
+                      color: %s;
+                      font-size: 12px;
+                      font-weight: 600;
+                    }
+                    pre {
+                      margin: 0;
+                      padding: 12px;
+                      line-height: 1.35;
+                      font-size: 12px;
+                      white-space: pre-wrap;
+                      overflow-wrap: normal;
+                      word-break: normal;
+                    }
+                  </style>
+                </head>
+                <body>
+                  <div class="header">%s</div>
+                  <pre>%s</pre>
+                </body>
+                </html>
+                """.formatted(
+                bodyBackground,
+                bodyColor,
+                headerBackground,
+                headerBorder,
+                headerColor,
+                title,
+                escaped
+        );
+    }
+
     private void applyTheme(UiTheme theme) {
         if (theme == null) {
             return;
@@ -3172,6 +3300,8 @@ public final class MainViewController {
         redrawMeasurementGuides();
         if (workspaceTabPane.getSelectionModel().getSelectedItem() == htmlSourceTab) {
             updateHtmlSourceView();
+        } else if (workspaceTabPane.getSelectionModel().getSelectedItem() == finalSourceTab) {
+            updateFinalSourceView();
         }
     }
 

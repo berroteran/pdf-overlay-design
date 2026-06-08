@@ -3331,9 +3331,9 @@ public final class MainViewController {
         CheckBox exportTableColorsCheck = new CheckBox("Tables: export colors");
         exportTableColorsCheck.setSelected(false);
         CheckBox exportTableBordersCheck = new CheckBox("Tables: export borders");
-        exportTableBordersCheck.setSelected(false);
+        exportTableBordersCheck.setSelected(true);
         CheckBox exportTextBordersCheck = new CheckBox("Text fields: export borders");
-        exportTextBordersCheck.setSelected(false);
+        exportTextBordersCheck.setSelected(true);
 
         VBox content = new VBox(
                 8,

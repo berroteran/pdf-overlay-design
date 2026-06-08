@@ -55,13 +55,13 @@ class OverlayElementTest {
         );
         tableElement.setTableColumnCount(3);
         tableElement.setTableDataRows(4);
-        tableElement.setTableColumnWidths("20,30,50");
+        tableElement.setTableColumnWidths("20,30,40");
 
         OverlayElement copy = tableElement.copy();
 
         assertEquals(3, copy.getTableColumnCount());
         assertEquals(4, copy.getTableDataRows());
-        assertEquals("20,30,50", copy.getTableColumnWidths());
+        assertEquals("20,30,40", copy.getTableColumnWidths());
     }
 
     /**

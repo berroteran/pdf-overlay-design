@@ -518,7 +518,7 @@ public final class HtmlExportService {
         for (double width : columnWidths) {
             builder.append("<col style=\"width:")
                     .append(formatDouble(width))
-                    .append("%;\">");
+                    .append("mm;\">");
         }
         builder.append("</colgroup>\n");
 
@@ -767,34 +767,24 @@ public final class HtmlExportService {
     private List<Double> parseTableColumnWidths(String rawWidths, int columnCount, double tableWidthMillimeters) {
         String source = rawWidths == null ? "" : rawWidths.strip();
         if (source.isBlank()) {
-            source = buildDefaultColumnWidths(columnCount);
+            source = buildDefaultColumnWidths(columnCount, tableWidthMillimeters);
         }
 
         String[] tokens = source.split(",");
         if (tokens.length != columnCount) {
-            source = buildDefaultColumnWidths(columnCount);
+            source = buildDefaultColumnWidths(columnCount, tableWidthMillimeters);
             tokens = source.split(",");
         }
 
         List<Double> values = new ArrayList<>();
-        double total = 0.0d;
         for (String token : tokens) {
             double width = Double.parseDouble(token.strip());
             if (width <= 0.0d) {
                 width = 1.0d;
             }
             values.add(width);
-            total += width;
         }
-        if (total <= 0.0d) {
-            total = columnCount;
-        }
-
-        List<Double> normalized = new ArrayList<>();
-        for (double value : values) {
-            normalized.add((value / total) * tableWidthMillimeters);
-        }
-        return normalized;
+        return values;
     }
 
     private List<String> parseTableHeaders(String rawHeaders, int columnCount) {
@@ -820,12 +810,13 @@ public final class HtmlExportService {
         return String.join("|", headers);
     }
 
-    private String buildDefaultColumnWidths(int columnCount) {
+    private String buildDefaultColumnWidths(int columnCount, double tableWidthMillimeters) {
         List<String> widths = new ArrayList<>();
-        double base = 100.0d / columnCount;
+        double safeTableWidth = Math.max(1.0d, tableWidthMillimeters);
+        double base = safeTableWidth / columnCount;
         double total = 0.0d;
         for (int index = 0; index < columnCount; index++) {
-            double value = index == columnCount - 1 ? 100.0d - total : base;
+            double value = index == columnCount - 1 ? safeTableWidth - total : base;
             total += value;
             widths.add(formatDouble(value));
         }

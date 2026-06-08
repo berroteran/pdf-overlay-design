@@ -148,7 +148,7 @@ public final class MainViewController {
     private final CheckBox enableStatusWatermarkCheck;
     private final CheckBox showMeasurementGridCheck;
     private final ComboBox<DocumentStatus> documentStatusCombo;
-    private final TextField tableWidthPercentField;
+    private final TextField tableWidthMillimetersField;
     private final TextField tableColumnWidthsField;
     private final ComboBox<Integer> tableRowsCombo;
     private final Button applyTableConfigButton;
@@ -223,7 +223,7 @@ public final class MainViewController {
         this.enableStatusWatermarkCheck = new CheckBox("Enable status watermark");
         this.showMeasurementGridCheck = new CheckBox("Show grid (cm)");
         this.documentStatusCombo = new ComboBox<>();
-        this.tableWidthPercentField = new TextField();
+        this.tableWidthMillimetersField = new TextField();
         this.tableColumnWidthsField = new TextField();
         this.tableRowsCombo = new ComboBox<>();
         this.applyTableConfigButton = new Button("Apply table config");
@@ -421,8 +421,8 @@ public final class MainViewController {
         selectedElementTextField.setPromptText("Text for selected element");
         applyElementIdButton.getStyleClass().add("action-button-medium");
         applyElementIdButton.setOnAction(event -> applySelectedElementId());
-        tableWidthPercentField.setPromptText("Example: 55");
-        tableColumnWidthsField.setPromptText("Example: 20,30,25,25");
+        tableWidthMillimetersField.setPromptText("Example: 120");
+        tableColumnWidthsField.setPromptText("Example: 30,35,25,30");
         tableRowsCombo.getItems().addAll(1, 4);
         tableRowsCombo.setValue(1);
         applyTableConfigButton.setOnAction(event -> applySelectedTableConfiguration());
@@ -703,9 +703,9 @@ public final class MainViewController {
                 selectedElementTextField,
                 applyTextButton,
                 new Separator(),
-                new Label("Table width (%)"),
-                tableWidthPercentField,
-                new Label("Table column widths (%)"),
+                new Label("Table width (mm)"),
+                tableWidthMillimetersField,
+                new Label("Table column widths (mm)"),
                 tableColumnWidthsField,
                 new Label("Table detail rows"),
                 tableRowsCombo,
@@ -1051,6 +1051,10 @@ public final class MainViewController {
         return currentPagePixelWidth / (pageMetadata.widthInches() * 2.54d);
     }
 
+    private double getPixelsPerMillimeterX() {
+        return getPixelsPerCentimeterX() / 10.0d;
+    }
+
     private double getPixelsPerCentimeterY() {
         PdfPageMetadata pageMetadata = getCurrentPageMetadata();
         if (pageMetadata == null || pageMetadata.heightInches() <= 0.0d) {
@@ -1064,6 +1068,15 @@ public final class MainViewController {
             return null;
         }
         return currentProject.getMetadata().getPages().get(currentPageIndex);
+    }
+
+    private double getCurrentPageWidthMillimeters() {
+        PdfPageMetadata pageMetadata = getCurrentPageMetadata();
+        return pageMetadata == null ? 0.0d : pageMetadata.widthMillimeters();
+    }
+
+    private double getElementWidthMillimeters(OverlayElement element) {
+        return Math.max(1.0d, element.getWidthRatio() * getCurrentPageWidthMillimeters());
     }
 
     private double resolveScrollOffset(double scrollValue, double contentLength, double viewportLength) {
@@ -1146,28 +1159,37 @@ public final class MainViewController {
     private Region createTablePreviewNode(OverlayElement element) {
         int columns = Math.max(1, element.getTableColumnCount());
         int detailRows = element.getTableDataRows();
-        List<Double> columnWidths;
+        List<Double> columnWidthsMillimeters;
         try {
-            columnWidths = parseColumnWidths(element.getTableColumnWidths(), columns);
+            columnWidthsMillimeters = parseColumnWidths(
+                    element.getTableColumnWidths(),
+                    columns,
+                    getElementWidthMillimeters(element)
+            );
         } catch (Exception ex) {
-            String fallbackWidths = buildDefaultColumnWidths(columns);
+            String fallbackWidths = buildDefaultColumnWidths(columns, getElementWidthMillimeters(element));
             element.setTableColumnWidths(fallbackWidths);
-            columnWidths = parseColumnWidths(fallbackWidths, columns);
+            columnWidthsMillimeters = parseColumnWidths(fallbackWidths, columns, getElementWidthMillimeters(element));
         }
 
         GridPane tableGrid = new GridPane();
         tableGrid.getStyleClass().add("editor-table-preview");
 
-        for (double widthPercent : columnWidths) {
+        double pixelsPerMillimeter = getPixelsPerMillimeterX();
+        for (double widthMillimeters : columnWidthsMillimeters) {
             ColumnConstraints constraints = new ColumnConstraints();
-            constraints.setPercentWidth(widthPercent);
+            double columnWidthPixels = Math.max(1.0d, widthMillimeters * pixelsPerMillimeter);
+            constraints.setMinWidth(columnWidthPixels);
+            constraints.setPrefWidth(columnWidthPixels);
             tableGrid.getColumnConstraints().add(constraints);
         }
 
         int totalRows = detailRows + 1;
+        double rowHeightPixels = Math.max(1.0d, element.getHeightRatio() * currentPagePixelHeight / totalRows);
         for (int row = 0; row < totalRows; row++) {
             RowConstraints rowConstraints = new RowConstraints();
-            rowConstraints.setPercentHeight(100.0d / totalRows);
+            rowConstraints.setMinHeight(rowHeightPixels);
+            rowConstraints.setPrefHeight(rowHeightPixels);
             tableGrid.getRowConstraints().add(rowConstraints);
         }
 
@@ -1182,7 +1204,7 @@ public final class MainViewController {
 
         for (int rowIndex = 1; rowIndex <= detailRows; rowIndex++) {
             for (int columnIndex = 0; columnIndex < columns; columnIndex++) {
-                Label detailCell = new Label(rowIndex == 1 ? "..." : "");
+                Label detailCell = new Label("");
                 detailCell.getStyleClass().add("editor-table-detail-cell");
                 detailCell.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
                 detailCell.setAlignment(Pos.CENTER_LEFT);
@@ -1367,7 +1389,7 @@ public final class MainViewController {
             int tableColumns = requestedTableColumns == null ? DEFAULT_TABLE_COLUMNS : requestedTableColumns;
             element.setTableColumnCount(tableColumns);
             element.setTableDataRows(1);
-            element.setTableColumnWidths(buildDefaultColumnWidths(tableColumns));
+            element.setTableColumnWidths(buildDefaultColumnWidths(tableColumns, getElementWidthMillimeters(element)));
             element.setText(buildDefaultTableHeaders(tableColumns));
         }
         return element;
@@ -1423,8 +1445,8 @@ public final class MainViewController {
         applyElementIdButton.setDisable(true);
         selectedElementTextField.setPromptText("Text for selected element");
         selectedElementTextField.clear();
-        tableWidthPercentField.clear();
-        tableWidthPercentField.setDisable(true);
+        tableWidthMillimetersField.clear();
+        tableWidthMillimetersField.setDisable(true);
         tableColumnWidthsField.clear();
         tableColumnWidthsField.setDisable(true);
         tableRowsCombo.setValue(1);
@@ -1490,13 +1512,17 @@ public final class MainViewController {
             return;
         }
         try {
-            String widthRaw = Optional.ofNullable(tableWidthPercentField.getText()).orElse("").strip();
+            String widthRaw = Optional.ofNullable(tableWidthMillimetersField.getText()).orElse("").strip();
             if (!widthRaw.isBlank()) {
-                double widthPercent = Double.parseDouble(widthRaw);
-                if (widthPercent <= 0.0d || widthPercent > 100.0d) {
-                    throw new IllegalArgumentException("Table width (%) must be > 0 and <= 100");
+                double widthMillimeters = Double.parseDouble(widthRaw);
+                double pageWidthMillimeters = getCurrentPageWidthMillimeters();
+                if (pageWidthMillimeters <= 0.0d) {
+                    throw new IllegalArgumentException("Current page width is not available");
                 }
-                selectedElement.setWidthRatio(widthPercent / 100.0d);
+                if (widthMillimeters <= 0.0d || widthMillimeters > pageWidthMillimeters) {
+                    throw new IllegalArgumentException("Table width (mm) must be > 0 and <= page width");
+                }
+                selectedElement.setWidthRatio(widthMillimeters / pageWidthMillimeters);
                 if (selectedNode != null) {
                     selectedNode.setPrefWidth(selectedElement.getWidthRatio() * currentPagePixelWidth);
                     selectedNode.setMinWidth(selectedNode.getPrefWidth());
@@ -1514,7 +1540,11 @@ public final class MainViewController {
             int rows = Optional.ofNullable(tableRowsCombo.getValue()).orElse(1);
             selectedElement.setTableDataRows(rows);
 
-            String normalizedWidths = normalizeColumnWidths(tableColumnWidthsField.getText(), columns);
+            String normalizedWidths = normalizeColumnWidths(
+                    tableColumnWidthsField.getText(),
+                    columns,
+                    getElementWidthMillimeters(selectedElement)
+            );
             selectedElement.setTableColumnWidths(normalizedWidths);
             tableColumnWidthsField.setText(normalizedWidths);
 
@@ -1528,25 +1558,25 @@ public final class MainViewController {
 
     private void updateTableInspectorFields(OverlayElement element) {
         boolean isTable = element.getType() == OverlayElementType.TABLE;
-        tableWidthPercentField.setDisable(!isTable);
+        tableWidthMillimetersField.setDisable(!isTable);
         tableColumnWidthsField.setDisable(!isTable);
         tableRowsCombo.setDisable(!isTable);
         applyTableConfigButton.setDisable(!isTable);
 
         if (!isTable) {
             selectedElementTextField.setPromptText("Text for selected element");
-            tableWidthPercentField.clear();
+            tableWidthMillimetersField.clear();
             tableColumnWidthsField.clear();
             tableRowsCombo.setValue(1);
             return;
         }
 
         selectedElementTextField.setPromptText("Headers separated by |");
-        tableWidthPercentField.setText(formatWidth(selectedElement.getWidthRatio() * 100.0d));
+        tableWidthMillimetersField.setText(formatWidth(getElementWidthMillimeters(selectedElement)));
         int columns = Math.max(1, element.getTableColumnCount());
         String widths = element.getTableColumnWidths();
         if (widths.isBlank()) {
-            widths = buildDefaultColumnWidths(columns);
+            widths = buildDefaultColumnWidths(columns, getElementWidthMillimeters(element));
             element.setTableColumnWidths(widths);
         }
         tableColumnWidthsField.setText(widths);
@@ -1816,21 +1846,27 @@ public final class MainViewController {
         return String.join("|", headers);
     }
 
-    private String buildDefaultColumnWidths(int columns) {
+    private String buildDefaultColumnWidths(int columns, double tableWidthMillimeters) {
         List<Double> widths = new ArrayList<>();
-        double base = 100.0d / columns;
+        double safeTableWidth = Math.max(1.0d, tableWidthMillimeters);
+        double base = safeTableWidth / columns;
         double runningTotal = 0.0d;
         for (int index = 0; index < columns; index++) {
-            double width = index == columns - 1 ? 100.0d - runningTotal : base;
+            double width = index == columns - 1 ? safeTableWidth - runningTotal : base;
             runningTotal += width;
             widths.add(width);
         }
         return formatColumnWidths(widths);
     }
 
-    private String normalizeColumnWidths(String rawValue, int expectedColumns) {
-        List<Double> normalized = parseColumnWidths(rawValue, expectedColumns);
-        return formatColumnWidths(normalized);
+    private String normalizeColumnWidths(String rawValue, int expectedColumns, double tableWidthMillimeters) {
+        List<Double> widths = parseColumnWidths(rawValue, expectedColumns, tableWidthMillimeters);
+        double totalWidth = widths.stream().mapToDouble(Double::doubleValue).sum();
+        double maxWidth = Math.max(1.0d, tableWidthMillimeters);
+        if (totalWidth > maxWidth + 0.01d) {
+            throw new IllegalArgumentException("Column widths (mm) must not exceed table width");
+        }
+        return formatColumnWidths(widths);
     }
 
     private String formatColumnWidths(List<Double> widths) {
@@ -1847,14 +1883,14 @@ public final class MainViewController {
                 .replaceAll("\\.$", "");
     }
 
-    private List<Double> parseColumnWidths(String rawValue, int expectedColumns) {
+    private List<Double> parseColumnWidths(String rawValue, int expectedColumns, double tableWidthMillimeters) {
         if (expectedColumns <= 0) {
             throw new IllegalArgumentException("Table must contain at least one column");
         }
 
         String source = rawValue == null ? "" : rawValue.strip();
         if (source.isBlank()) {
-            source = buildDefaultColumnWidths(expectedColumns);
+            source = buildDefaultColumnWidths(expectedColumns, tableWidthMillimeters);
         }
 
         String[] tokens = source.split(",");
@@ -1865,24 +1901,14 @@ public final class MainViewController {
         }
 
         List<Double> values = new ArrayList<>();
-        double total = 0.0d;
         for (String token : tokens) {
             double width = Double.parseDouble(token.strip());
             if (width <= 0.0d) {
                 throw new IllegalArgumentException("Each column width must be > 0");
             }
             values.add(width);
-            total += width;
         }
-        if (total <= 0.0d) {
-            throw new IllegalArgumentException("Invalid total column width");
-        }
-
-        List<Double> normalized = new ArrayList<>();
-        for (double value : values) {
-            normalized.add((value / total) * 100.0d);
-        }
-        return normalized;
+        return values;
     }
 
     private List<String> parseTableHeaders(OverlayElement element, int columns) {

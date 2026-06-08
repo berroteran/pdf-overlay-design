@@ -206,7 +206,7 @@ public final class OverlayElement {
     }
 
     /**
-     * @return definición de anchos por columna en porcentaje separado por comas.
+     * @return definición de anchos por columna en milímetros separados por comas.
      */
     public String getTableColumnWidths() {
         return tableColumnWidths;
@@ -215,7 +215,7 @@ public final class OverlayElement {
     /**
      * Define anchos por columna para la tabla.
      *
-     * @param tableColumnWidths valores por columna separados por coma.
+     * @param tableColumnWidths valores en milímetros por columna separados por coma.
      */
     public void setTableColumnWidths(String tableColumnWidths) {
         this.tableColumnWidths = tableColumnWidths == null ? "" : tableColumnWidths.strip();

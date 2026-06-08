@@ -96,6 +96,33 @@ class HtmlExportServiceTest {
     }
 
     /**
+     * Verifica que las tablas exporten anchos directos en milímetros.
+     */
+    @Test
+    void shouldExportTableColumnWidthsInMillimeters() throws Exception {
+        HtmlExportService service = new HtmlExportService(new PdfService());
+        OverlayProject project = createSinglePageProject();
+        OverlayElement table = new OverlayElement(
+                OverlayElementType.TABLE,
+                0.1,
+                0.1,
+                0.5,
+                0.2,
+                "A|B|C"
+        );
+        table.setTableColumnCount(3);
+        table.setTableColumnWidths("30,40,37.95");
+        project.getOverlayPage(0).addElement(table);
+
+        String fragment = service.buildEmbedHtmlFragment(project, 300, false, ExportOptions.defaultOptions());
+
+        assertTrue(fragment.contains("<col style=\"width:30mm;\">"));
+        assertTrue(fragment.contains("<col style=\"width:40mm;\">"));
+        assertTrue(fragment.contains("<col style=\"width:37.95mm;\">"));
+        assertFalse(fragment.contains("<col style=\"width:30%;\">"));
+    }
+
+    /**
      * Verifica que el HTML standalone mantiene documento completo sin metadata editable.
      */
     @Test

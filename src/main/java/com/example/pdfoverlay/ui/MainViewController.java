@@ -107,6 +107,7 @@ public final class MainViewController {
     private static final double RESIZE_HANDLE_SIZE = 8.0d;
     private static final double MIN_RESIZABLE_SIZE = 8.0d;
     private static final double MIN_MARKER_SIZE = 6.0d;
+    private static final double MIN_TABLE_COLUMN_WIDTH_MM = 0.01d;
     private static final String SOURCE_BLOCK_FULL = "Full document";
     private static final String SOURCE_BLOCK_HEAD = "HEAD";
     private static final String SOURCE_BLOCK_STYLE = "STYLE";
@@ -1279,14 +1280,7 @@ public final class MainViewController {
         GridPane tableGrid = new GridPane();
         tableGrid.getStyleClass().add("editor-table-preview");
 
-        double pixelsPerMillimeter = getPixelsPerMillimeterX();
-        for (double widthMillimeters : columnWidthsMillimeters) {
-            ColumnConstraints constraints = new ColumnConstraints();
-            double columnWidthPixels = Math.max(1.0d, widthMillimeters * pixelsPerMillimeter);
-            constraints.setMinWidth(columnWidthPixels);
-            constraints.setPrefWidth(columnWidthPixels);
-            tableGrid.getColumnConstraints().add(constraints);
-        }
+        updateTablePreviewColumnConstraints(tableGrid, columnWidthsMillimeters);
 
         int totalRows = detailRows + 1;
         double rowHeightPixels = Math.max(1.0d, element.getHeightRatio() * currentPagePixelHeight / totalRows);
@@ -1508,12 +1502,32 @@ public final class MainViewController {
                 columns,
                 originalTableWidth
         );
-        double ratio = resizedTableWidth / originalTableWidth;
-        List<Double> resizedWidths = new ArrayList<>();
-        for (double originalWidth : originalWidths) {
-            resizedWidths.add(Math.max(1.0d, originalWidth * ratio));
+        List<Double> resizedWidths = scaleColumnWidths(originalWidths, originalTableWidth, resizedTableWidth);
+        String formattedWidths = formatColumnWidths(resizedWidths, resizedTableWidth);
+        selectedElement.setTableColumnWidths(formattedWidths);
+        updateSelectedTablePreviewColumnConstraints(formattedWidths, columns, resizedTableWidth);
+    }
+
+    private void updateSelectedTablePreviewColumnConstraints(String rawWidths, int columns, double tableWidthMillimeters) {
+        if (!(selectedNode instanceof GridPane tableGrid)) {
+            return;
         }
-        selectedElement.setTableColumnWidths(formatColumnWidths(resizedWidths));
+        List<Double> widths = parseColumnWidths(rawWidths, columns, tableWidthMillimeters);
+        updateTablePreviewColumnConstraints(tableGrid, widths);
+    }
+
+    private void updateTablePreviewColumnConstraints(GridPane tableGrid, List<Double> columnWidthsMillimeters) {
+        tableGrid.getColumnConstraints().clear();
+        double pixelsPerMillimeter = getPixelsPerMillimeterX();
+        for (double widthMillimeters : columnWidthsMillimeters) {
+            ColumnConstraints constraints = new ColumnConstraints();
+            double columnWidthPixels = Math.max(1.0d, widthMillimeters * pixelsPerMillimeter);
+            constraints.setMinWidth(columnWidthPixels);
+            constraints.setPrefWidth(columnWidthPixels);
+            constraints.setMaxWidth(columnWidthPixels);
+            tableGrid.getColumnConstraints().add(constraints);
+        }
+        tableGrid.requestLayout();
     }
 
     private void handleCanvasClick(MouseEvent event) {
@@ -1731,6 +1745,12 @@ public final class MainViewController {
             return;
         }
         try {
+            double originalTableWidth = getElementWidthMillimeters(selectedElement);
+            String originalColumnWidths = selectedElement.getTableColumnWidths();
+            String requestedColumnWidths = Optional.ofNullable(tableColumnWidthsField.getText()).orElse("").strip();
+            boolean columnWidthsChanged = !requestedColumnWidths.equals(originalColumnWidths);
+            boolean tableWidthChanged = false;
+
             String widthRaw = Optional.ofNullable(tableWidthMillimetersField.getText()).orElse("").strip();
             if (!widthRaw.isBlank()) {
                 double widthMillimeters = Double.parseDouble(widthRaw);
@@ -1741,6 +1761,7 @@ public final class MainViewController {
                 if (widthMillimeters <= 0.0d || widthMillimeters > pageWidthMillimeters) {
                     throw new IllegalArgumentException("Table width (mm) must be > 0 and <= page width");
                 }
+                tableWidthChanged = Math.abs(widthMillimeters - originalTableWidth) > 0.01d;
                 selectedElement.setWidthRatio(widthMillimeters / pageWidthMillimeters);
                 if (selectedNode != null) {
                     selectedNode.setPrefWidth(selectedElement.getWidthRatio() * currentPagePixelWidth);
@@ -1759,12 +1780,21 @@ public final class MainViewController {
             int rows = Optional.ofNullable(tableRowsCombo.getValue()).orElse(1);
             selectedElement.setTableDataRows(rows);
 
-            String normalizedWidths = normalizeColumnWidths(
-                    tableColumnWidthsField.getText(),
-                    columns,
-                    getElementWidthMillimeters(selectedElement)
-            );
+            double currentTableWidth = getElementWidthMillimeters(selectedElement);
+            String normalizedWidths;
+            if (tableWidthChanged && !columnWidthsChanged) {
+                List<Double> currentWidths = parseColumnWidths(originalColumnWidths, columns, originalTableWidth);
+                List<Double> scaledWidths = scaleColumnWidths(currentWidths, originalTableWidth, currentTableWidth);
+                normalizedWidths = formatColumnWidths(scaledWidths, currentTableWidth);
+            } else {
+                normalizedWidths = normalizeColumnWidths(
+                        requestedColumnWidths,
+                        columns,
+                        currentTableWidth
+                );
+            }
             selectedElement.setTableColumnWidths(normalizedWidths);
+            tableWidthMillimetersField.setText(formatWidth(currentTableWidth));
             tableColumnWidthsField.setText(normalizedWidths);
 
             refreshVisualNode(selectedElement);
@@ -1791,11 +1821,12 @@ public final class MainViewController {
         }
 
         selectedElementTextField.setPromptText("Headers separated by |");
-        tableWidthMillimetersField.setText(formatWidth(getElementWidthMillimeters(selectedElement)));
+        double tableWidthMillimeters = getElementWidthMillimeters(element);
+        tableWidthMillimetersField.setText(formatWidth(tableWidthMillimeters));
         int columns = Math.max(1, element.getTableColumnCount());
         String widths = element.getTableColumnWidths();
         if (widths.isBlank()) {
-            widths = buildDefaultColumnWidths(columns, getElementWidthMillimeters(element));
+            widths = buildDefaultColumnWidths(columns, tableWidthMillimeters);
             element.setTableColumnWidths(widths);
         }
         tableColumnWidthsField.setText(widths);
@@ -2075,7 +2106,7 @@ public final class MainViewController {
             runningTotal += width;
             widths.add(width);
         }
-        return formatColumnWidths(widths);
+        return formatColumnWidths(widths, safeTableWidth);
     }
 
     private String normalizeColumnWidths(String rawValue, int expectedColumns, double tableWidthMillimeters) {
@@ -2096,10 +2127,64 @@ public final class MainViewController {
         return String.join(",", tokens);
     }
 
+    private String formatColumnWidths(List<Double> widths, double tableWidthMillimeters) {
+        return formatColumnWidths(fitColumnWidthsToTableWidth(widths, tableWidthMillimeters));
+    }
+
+    private List<Double> scaleColumnWidths(List<Double> sourceWidths, double sourceTableWidthMillimeters,
+                                           double targetTableWidthMillimeters) {
+        double safeSourceWidth = Math.max(MIN_TABLE_COLUMN_WIDTH_MM, sourceTableWidthMillimeters);
+        double safeTargetWidth = Math.max(MIN_TABLE_COLUMN_WIDTH_MM, targetTableWidthMillimeters);
+        double ratio = safeTargetWidth / safeSourceWidth;
+        List<Double> scaledWidths = new ArrayList<>();
+        for (double sourceWidth : sourceWidths) {
+            scaledWidths.add(Math.max(MIN_TABLE_COLUMN_WIDTH_MM, sourceWidth * ratio));
+        }
+        return fitColumnWidthsToTableWidth(scaledWidths, safeTargetWidth);
+    }
+
+    private List<Double> fitColumnWidthsToTableWidth(List<Double> widths, double tableWidthMillimeters) {
+        if (widths.isEmpty()) {
+            throw new IllegalArgumentException("Column widths count must match columns");
+        }
+
+        int columnCount = widths.size();
+        double targetWidth = roundWidth(Math.max(MIN_TABLE_COLUMN_WIDTH_MM, tableWidthMillimeters));
+        double minimumWidth = Math.min(MIN_TABLE_COLUMN_WIDTH_MM, targetWidth / columnCount);
+        double sourceTotal = widths.stream()
+                .mapToDouble(width -> Math.max(minimumWidth, width))
+                .sum();
+
+        if (sourceTotal <= 0.0d) {
+            return parseColumnWidths(buildDefaultColumnWidths(columnCount, targetWidth), columnCount, targetWidth);
+        }
+
+        List<Double> fittedWidths = new ArrayList<>();
+        double runningTotal = 0.0d;
+        for (int index = 0; index < columnCount; index++) {
+            if (index == columnCount - 1) {
+                fittedWidths.add(Math.max(minimumWidth, roundWidth(targetWidth - runningTotal)));
+                continue;
+            }
+
+            double proportionalWidth = widths.get(index) * targetWidth / sourceTotal;
+            double remainingMinimum = (columnCount - index - 1) * minimumWidth;
+            double maximumAllowed = Math.max(minimumWidth, targetWidth - runningTotal - remainingMinimum);
+            double fittedWidth = clamp(roundWidth(proportionalWidth), minimumWidth, maximumAllowed);
+            fittedWidths.add(fittedWidth);
+            runningTotal += fittedWidth;
+        }
+        return fittedWidths;
+    }
+
     private String formatWidth(double value) {
-        return String.format(Locale.US, "%.2f", value)
+        return String.format(Locale.US, "%.2f", roundWidth(value))
                 .replaceAll("0+$", "")
                 .replaceAll("\\.$", "");
+    }
+
+    private double roundWidth(double value) {
+        return Math.round(value * 100.0d) / 100.0d;
     }
 
     private List<Double> parseColumnWidths(String rawValue, int expectedColumns, double tableWidthMillimeters) {

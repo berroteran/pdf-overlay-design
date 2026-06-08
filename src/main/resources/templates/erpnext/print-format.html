@@ -1,12 +1,10 @@
 <html>
 <head>
-    {{ include_style('print.bundle.css') }}
-    <style>{{ print_style }}</style>
 </head>
 <body>
-    <div class="action-banner print-hide">...</div>
     <div class="print-format-gutter">
         <div class="print-format">
+            <style>{{ print_style }}</style>
             {{ body }}
         </div>
     </div>

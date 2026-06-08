@@ -67,7 +67,9 @@ import javafx.scene.web.WebView;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import java.awt.Desktop;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -153,10 +155,10 @@ public final class MainViewController {
     private final ComboBox<Integer> exportDpiCombo;
     private final Slider zoomSlider;
 
-    private final Button openHtmlButton;
-    private final Button exportButton;
     private final Button printHtmlButton;
+    private final Button printHtmlOnlyButton;
     private final Button printPdfButton;
+    private final Button openHtmlInBrowserButton;
     private final Button previousPageButton;
     private final Button nextPageButton;
     private final Button deleteSelectedButton;
@@ -228,10 +230,10 @@ public final class MainViewController {
         this.exportDpiCombo = new ComboBox<>();
         this.zoomSlider = new Slider(0.0, 300.0, 100.0);
 
-        this.openHtmlButton = new Button("Open HTML");
-        this.exportButton = new Button("Save Project As...");
         this.printHtmlButton = new Button("Print HTML");
+        this.printHtmlOnlyButton = new Button("Print HTML Only");
         this.printPdfButton = new Button("Print PDF");
+        this.openHtmlInBrowserButton = new Button("Open HTML");
         this.previousPageButton = new Button("< Prev");
         this.nextPageButton = new Button("Next >");
         this.deleteSelectedButton = new Button("Delete selected");
@@ -532,9 +534,17 @@ public final class MainViewController {
         exportErpNextMenuItem.setOnAction(event -> exportErpNextFragment());
         exportErpNextMenuItem.setGraphic(ButtonIconFactory.saveHtmlIcon());
 
-        MenuItem printHtmlMenuItem = new MenuItem("Print HTML...");
+        MenuItem printHtmlMenuItem = new MenuItem("Print HTML with PDF background...");
         printHtmlMenuItem.setOnAction(event -> printHtmlLayer());
         printHtmlMenuItem.setGraphic(ButtonIconFactory.printHtmlIcon());
+
+        MenuItem printHtmlOnlyMenuItem = new MenuItem("Print HTML overlay only...");
+        printHtmlOnlyMenuItem.setOnAction(event -> printHtmlOnlyLayer());
+        printHtmlOnlyMenuItem.setGraphic(ButtonIconFactory.printHtmlOnlyIcon());
+
+        MenuItem openHtmlOnlyInBrowserMenuItem = new MenuItem("Open HTML overlay in browser...");
+        openHtmlOnlyInBrowserMenuItem.setOnAction(event -> openHtmlOnlyInBrowser());
+        openHtmlOnlyInBrowserMenuItem.setGraphic(ButtonIconFactory.browserIcon());
 
         MenuItem printPdfMenuItem = new MenuItem("Print PDF...");
         printPdfMenuItem.setOnAction(event -> printPdfDocument());
@@ -550,7 +560,7 @@ public final class MainViewController {
 
         Menu printMenu = new Menu("Print");
         printMenu.setGraphic(ButtonIconFactory.printHtmlIcon());
-        printMenu.getItems().addAll(printHtmlMenuItem, printPdfMenuItem);
+        printMenu.getItems().addAll(printPdfMenuItem, printHtmlMenuItem, printHtmlOnlyMenuItem);
 
         Menu fileMenu = new Menu("File");
         fileMenu.setGraphic(ButtonIconFactory.fileMenuIcon());
@@ -559,6 +569,7 @@ public final class MainViewController {
                 new SeparatorMenuItem(),
                 saveProjectMenuItem,
                 exportErpNextMenuItem,
+                openHtmlOnlyInBrowserMenuItem,
                 new SeparatorMenuItem(),
                 printMenu,
                 new SeparatorMenuItem(),
@@ -571,13 +582,21 @@ public final class MainViewController {
 
     private Node buildTopToolbar() {
         printHtmlButton.setOnAction(event -> printHtmlLayer());
+        printHtmlOnlyButton.setOnAction(event -> printHtmlOnlyLayer());
         printPdfButton.setOnAction(event -> printPdfDocument());
+        openHtmlInBrowserButton.setOnAction(event -> openHtmlOnlyInBrowser());
         applyToolbarButtonStyle(printHtmlButton);
+        applyToolbarButtonStyle(printHtmlOnlyButton);
         applyToolbarButtonStyle(printPdfButton);
+        applyToolbarButtonStyle(openHtmlInBrowserButton);
         applyButtonIcon(printHtmlButton, ButtonIconFactory.printHtmlIcon());
+        applyButtonIcon(printHtmlOnlyButton, ButtonIconFactory.printHtmlOnlyIcon());
         applyButtonIcon(printPdfButton, ButtonIconFactory.printPdfIcon());
-        applyButtonTooltip(printHtmlButton, "Print HTML");
+        applyButtonIcon(openHtmlInBrowserButton, ButtonIconFactory.browserIcon());
+        applyButtonTooltip(printHtmlButton, "Print HTML with embedded PDF background");
+        applyButtonTooltip(printHtmlOnlyButton, "Print strictly the HTML overlay only");
         applyButtonTooltip(printPdfButton, "Print PDF");
+        applyButtonTooltip(openHtmlInBrowserButton, "Open HTML overlay in default browser");
 
         previousPageButton.setOnAction(event -> goToPage(currentPageIndex - 1));
         nextPageButton.setOnAction(event -> goToPage(currentPageIndex + 1));
@@ -602,7 +621,9 @@ public final class MainViewController {
         HBox toolbar = new HBox(
                 10,
                 printHtmlButton,
+                printHtmlOnlyButton,
                 printPdfButton,
+                openHtmlInBrowserButton,
                 new Separator(),
                 previousPageButton,
                 nextPageButton,
@@ -1885,9 +1906,10 @@ public final class MainViewController {
 
     private void updateButtonsState() {
         boolean hasProject = currentProject != null;
-        exportButton.setDisable(!hasProject);
         printHtmlButton.setDisable(!hasProject);
+        printHtmlOnlyButton.setDisable(!hasProject);
         printPdfButton.setDisable(!hasProject);
+        openHtmlInBrowserButton.setDisable(!hasProject);
         previousPageButton.setDisable(!hasProject || currentPageIndex <= 0);
         nextPageButton.setDisable(!hasProject || currentProject != null
                 && currentPageIndex >= currentProject.getMetadata().pageCount() - 1);
@@ -1923,12 +1945,12 @@ public final class MainViewController {
         }
 
         try {
-            int selectedDpi = exportDpiCombo.getValue() == null ? 300 : exportDpiCombo.getValue();
+            int selectedDpi = getSelectedExportDpi();
             Path htmlPath = htmlExportService.exportProjectAsHtml(
                     currentProject,
                     targetHtmlPath,
                     selectedDpi,
-                    exportSelection.get().includePdfBackground(),
+                    true,
                     exportSelection.get().exportOptions()
             );
             currentHtmlPath = htmlPath;
@@ -2015,11 +2037,11 @@ public final class MainViewController {
         }
 
         try {
-            int selectedDpi = exportDpiCombo.getValue() == null ? 300 : exportDpiCombo.getValue();
+            int selectedDpi = getSelectedExportDpi();
             String fragmentHtml = htmlExportService.buildEmbedHtmlFragment(
                     currentProject,
                     selectedDpi,
-                    exportSelection.get().includePdfBackground(),
+                    false,
                     exportSelection.get().exportOptions()
             );
             Files.writeString(targetHtmlPath, fragmentHtml);
@@ -2056,20 +2078,14 @@ public final class MainViewController {
         }
 
         try {
-            int selectedDpi = exportDpiCombo.getValue() == null ? 300 : exportDpiCombo.getValue();
-            Path tempHtmlPath = Files.createTempFile("pdf-overlay-print-", ".html");
-            Path htmlPath = htmlExportService.exportProjectAsHtml(
-                    currentProject,
-                    tempHtmlPath,
-                    selectedDpi,
-                    true,
-                    ExportOptions.defaultOptions()
-            );
+            Path htmlPath = createTemporaryStandaloneHtml("pdf-overlay-print-with-background-", true);
 
             printService.printHtml(
                     htmlPath,
                     ownerStage,
-                    printed -> statusLabel.setText(printed ? "HTML sent to printer" : "HTML print cancelled"),
+                    printed -> statusLabel.setText(printed
+                            ? "HTML with PDF background sent to printer"
+                            : "HTML print cancelled"),
                     errorMessage -> {
                         statusLabel.setText("HTML print failed");
                         showError("Cannot print HTML", errorMessage);
@@ -2081,6 +2097,69 @@ public final class MainViewController {
         }
     }
 
+    private void printHtmlOnlyLayer() {
+        if (currentProject == null) {
+            statusLabel.setText("Open a PDF first");
+            return;
+        }
+
+        try {
+            Path htmlPath = createTemporaryStandaloneHtml("pdf-overlay-print-html-only-", false);
+
+            printService.printHtml(
+                    htmlPath,
+                    ownerStage,
+                    printed -> statusLabel.setText(printed
+                            ? "HTML overlay sent to printer"
+                            : "HTML overlay print cancelled"),
+                    errorMessage -> {
+                        statusLabel.setText("HTML overlay print failed");
+                        showError("Cannot print HTML overlay", errorMessage);
+                    }
+            );
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Error printing HTML overlay", ex);
+            showError("Cannot print HTML overlay", ex.getMessage());
+        }
+    }
+
+    private void openHtmlOnlyInBrowser() {
+        if (currentProject == null) {
+            statusLabel.setText("Open a PDF first");
+            return;
+        }
+
+        if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+            showError("Cannot open browser", "Desktop browser integration is not available in this environment.");
+            return;
+        }
+
+        try {
+            Path htmlPath = createTemporaryStandaloneHtml("pdf-overlay-browser-html-only-", false);
+            Desktop.getDesktop().browse(htmlPath.toUri());
+            statusLabel.setText("HTML overlay opened in default browser");
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Error opening HTML overlay in browser", ex);
+            showError("Cannot open browser", ex.getMessage());
+        }
+    }
+
+    private Path createTemporaryStandaloneHtml(String filePrefix, boolean includePdfBackground) throws IOException {
+        Path tempHtmlPath = Files.createTempFile(filePrefix, ".html");
+        String browserHtml = htmlExportService.buildStandaloneBrowserHtml(
+                currentProject,
+                getSelectedExportDpi(),
+                includePdfBackground,
+                ExportOptions.defaultOptions()
+        );
+        Files.writeString(tempHtmlPath, browserHtml, StandardCharsets.UTF_8);
+        return tempHtmlPath;
+    }
+
+    private int getSelectedExportDpi() {
+        return exportDpiCombo.getValue() == null ? 300 : exportDpiCombo.getValue();
+    }
+
     private void refreshHtmlSourcePreview() {
         if (currentProject == null) {
             latestGeneratedHtmlSource = "<!-- Open a PDF or HTML project first -->";
@@ -2088,10 +2167,9 @@ public final class MainViewController {
             return;
         }
         try {
-            int selectedDpi = exportDpiCombo.getValue() == null ? 300 : exportDpiCombo.getValue();
             latestGeneratedHtmlSource = htmlExportService.buildHtmlContent(
                     currentProject,
-                    selectedDpi,
+                    getSelectedExportDpi(),
                     false,
                     ExportOptions.defaultOptions()
             );
@@ -2335,8 +2413,6 @@ public final class MainViewController {
         ButtonType exportButtonType = new ButtonType("Export", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(exportButtonType, ButtonType.CANCEL);
 
-        CheckBox includePdfBackgroundCheck = new CheckBox("General: embed PDF background image");
-        includePdfBackgroundCheck.setSelected(false);
         CheckBox exportFontCheck = new CheckBox("General: export font");
         exportFontCheck.setSelected(true);
         CheckBox exportTableColorsCheck = new CheckBox("Tables: export colors");
@@ -2348,7 +2424,6 @@ public final class MainViewController {
 
         VBox content = new VBox(
                 8,
-                includePdfBackgroundCheck,
                 exportFontCheck,
                 exportTableColorsCheck,
                 exportTableBordersCheck,
@@ -2360,7 +2435,6 @@ public final class MainViewController {
         dialog.setResultConverter(buttonType -> {
             if (buttonType == exportButtonType) {
                 return new SaveExportSelection(
-                        includePdfBackgroundCheck.isSelected(),
                         new ExportOptions(
                                 exportFontCheck.isSelected(),
                                 exportTableColorsCheck.isSelected(),
@@ -2447,6 +2521,6 @@ public final class MainViewController {
     /**
      * Selección de opciones específicas para guardado de HTML.
      */
-    private record SaveExportSelection(boolean includePdfBackground, ExportOptions exportOptions) {
+    private record SaveExportSelection(ExportOptions exportOptions) {
     }
 }

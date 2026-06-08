@@ -104,10 +104,36 @@ public final class ButtonIconFactory {
     }
 
     /**
+     * @return ícono para imprimir solo el overlay HTML.
+     */
+    public static Node printHtmlOnlyIcon() {
+        return wrap(createPrinterIcon(ACCENT_GREEN));
+    }
+
+    /**
      * @return ícono para imprimir PDF.
      */
     public static Node printPdfIcon() {
         return wrap(createPrinterIcon(ACCENT_RED));
+    }
+
+    /**
+     * @return ícono de navegador/web.
+     */
+    public static Node browserIcon() {
+        Circle globe = new Circle(7.0, 7.0, 4.8);
+        globe.setFill(Color.web("#e7f3ff"));
+        globe.setStroke(ACCENT_BLUE);
+        globe.setStrokeWidth(1.1);
+
+        Line equator = createLine(2.8, 7.0, 11.2, 7.0, ACCENT_BLUE, 0.9);
+        Line meridian = createLine(7.0, 2.8, 7.0, 11.2, ACCENT_BLUE, 0.9);
+        Line latTop = createLine(3.6, 4.8, 10.4, 4.8, ACCENT_BLUE, 0.8);
+        Line latBottom = createLine(3.6, 9.2, 10.4, 9.2, ACCENT_BLUE, 0.8);
+        Line lonLeftTop = createLine(5.0, 2.9, 4.1, 11.1, ACCENT_BLUE, 0.8);
+        Line lonRightTop = createLine(9.0, 2.9, 9.9, 11.1, ACCENT_BLUE, 0.8);
+
+        return wrap(new Group(globe, equator, meridian, latTop, latBottom, lonLeftTop, lonRightTop));
     }
 
     /**

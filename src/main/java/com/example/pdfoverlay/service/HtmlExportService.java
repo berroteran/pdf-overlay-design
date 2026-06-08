@@ -137,37 +137,23 @@ public final class HtmlExportService {
      */
     public String buildHtmlContent(OverlayProject project, float renderDpi,
                                    boolean includePdfBackground, ExportOptions exportOptions) throws IOException {
-        Objects.requireNonNull(project, "project is required");
-        Objects.requireNonNull(exportOptions, "exportOptions is required");
-        if (renderDpi <= 0) {
-            throw new IllegalArgumentException("renderDpi must be > 0");
-        }
+        return buildTemplatedHtml(project, renderDpi, includePdfBackground, exportOptions, true);
+    }
 
-        StringBuilder html = new StringBuilder();
-        String printStyle = buildPrintStyle(
-                project,
-                exportOptions,
-                ROOT_SELECTOR_BODY,
-                true,
-                buildPagePrintCss(project.getMetadata().getPages())
-        );
-        StringBuilder bodyContent = new StringBuilder();
-        String bodyAttributes = buildBodyAttributes(project);
-
-        for (PdfPageMetadata pageMetadata : project.getMetadata().getPages()) {
-            int pageIndex = pageMetadata.pageIndex();
-            String imageDataUri = "";
-            if (includePdfBackground) {
-                byte[] pngBytes = pdfService.renderPageToPngBytes(project.getPdfPath(), pageIndex, renderDpi);
-                imageDataUri = "data:image/png;base64," + Base64.getEncoder().encodeToString(pngBytes);
-            }
-            OverlayPage overlayPage = project.getOverlayPage(pageIndex);
-            bodyContent.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground));
-        }
-
-        html.append(renderUsingTemplate(printStyle, bodyContent.toString(), bodyAttributes));
-        appendMetadataBeforeClosingBody(html, buildMetadataComment(project, HtmlTemplateType.ERPNEXT_PRINT_FORMAT));
-        return html.toString();
+    /**
+     * Construye un documento HTML standalone para navegador usando la plantilla ERPNext.
+     *
+     * @param project              proyecto fuente.
+     * @param renderDpi            resolución para render de fondo.
+     * @param includePdfBackground true para incrustar fondo PDF.
+     * @param exportOptions        opciones visuales de exportación.
+     * @return documento HTML completo listo para abrir en navegador.
+     * @throws IOException cuando falla la conversión de páginas PDF.
+     */
+    public String buildStandaloneBrowserHtml(OverlayProject project, float renderDpi,
+                                             boolean includePdfBackground, ExportOptions exportOptions)
+            throws IOException {
+        return buildTemplatedHtml(project, renderDpi, includePdfBackground, exportOptions, false);
     }
 
     /**
@@ -182,16 +168,51 @@ public final class HtmlExportService {
      */
     public String buildEmbedHtmlFragment(OverlayProject project, float renderDpi,
                                          boolean includePdfBackground, ExportOptions exportOptions) throws IOException {
-        Objects.requireNonNull(project, "project is required");
-        Objects.requireNonNull(exportOptions, "exportOptions is required");
-        if (renderDpi <= 0) {
-            throw new IllegalArgumentException("renderDpi must be > 0");
-        }
+        validateBuildRequest(project, renderDpi, exportOptions);
 
         String rootClass = buildFragmentRootClass(project);
         String printStyle = buildPrintStyle(project, exportOptions, ROOT_SELECTOR_FRAGMENT, false, "");
-        StringBuilder bodyContent = new StringBuilder();
+        String bodyContent = buildPagesMarkup(project, renderDpi, includePdfBackground);
 
+        return """
+                <style>
+                %s
+                </style>
+                <div class="%s">
+                %s
+                </div>
+                """.formatted(printStyle, rootClass, bodyContent);
+    }
+
+    private String buildTemplatedHtml(OverlayProject project, float renderDpi, boolean includePdfBackground,
+                                      ExportOptions exportOptions, boolean includeProjectMetadata)
+            throws IOException {
+        validateBuildRequest(project, renderDpi, exportOptions);
+
+        String printStyle = buildPrintStyle(
+                project,
+                exportOptions,
+                ROOT_SELECTOR_BODY,
+                true,
+                buildPagePrintCss(project.getMetadata().getPages())
+        );
+        String rendered = renderUsingTemplate(
+                printStyle,
+                buildPagesMarkup(project, renderDpi, includePdfBackground),
+                buildBodyAttributes(project)
+        );
+        if (!includeProjectMetadata) {
+            return rendered;
+        }
+
+        StringBuilder html = new StringBuilder(rendered);
+        appendMetadataBeforeClosingBody(html, buildMetadataComment(project, HtmlTemplateType.ERPNEXT_PRINT_FORMAT));
+        return html.toString();
+    }
+
+    private String buildPagesMarkup(OverlayProject project, float renderDpi, boolean includePdfBackground)
+            throws IOException {
+        StringBuilder bodyContent = new StringBuilder();
         for (PdfPageMetadata pageMetadata : project.getMetadata().getPages()) {
             int pageIndex = pageMetadata.pageIndex();
             String imageDataUri = "";
@@ -202,15 +223,15 @@ public final class HtmlExportService {
             OverlayPage overlayPage = project.getOverlayPage(pageIndex);
             bodyContent.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground));
         }
+        return bodyContent.toString();
+    }
 
-        return """
-                <style>
-                %s
-                </style>
-                <div class="%s">
-                %s
-                </div>
-                """.formatted(printStyle, rootClass, bodyContent);
+    private void validateBuildRequest(OverlayProject project, float renderDpi, ExportOptions exportOptions) {
+        Objects.requireNonNull(project, "project is required");
+        Objects.requireNonNull(exportOptions, "exportOptions is required");
+        if (renderDpi <= 0) {
+            throw new IllegalArgumentException("renderDpi must be > 0");
+        }
     }
 
     /**

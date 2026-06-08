@@ -27,16 +27,14 @@ class HtmlExportServiceTest {
     @Test
     void shouldPersistDocumentStatusInHtmlMetadata() throws Exception {
         HtmlExportService service = new HtmlExportService(new PdfService());
-        OverlayProject project = new OverlayProject(
-                Path.of("sample.pdf"),
-                new PdfDocumentMetadata(Path.of("sample.pdf"), List.of(new PdfPageMetadata(0, 612, 792)))
-        );
+        OverlayProject project = createSinglePageProject();
         project.setDocumentStatus(DocumentStatus.VOIDED);
         project.setStatusWatermarkEnabled(true);
 
         String htmlContent = service.buildHtmlContent(project, 300, false, ExportOptions.defaultOptions());
-        assertTrue(htmlContent.contains("{{ include_style('print.bundle.css') }}"));
+        assertFalse(htmlContent.contains("{{ include_style('print.bundle.css') }}"));
         assertTrue(htmlContent.contains("<div class=\"print-format\">"));
+        assertPrintStyleInsidePrintFormat(htmlContent);
         assertTrue(htmlContent.contains("DOC_STATUS_ENABLED=true"));
         assertTrue(htmlContent.contains("HTML_TEMPLATE=erpnext-print-format"));
         assertTrue(htmlContent.contains("DOC_STATUS=VOIDED"));
@@ -58,10 +56,7 @@ class HtmlExportServiceTest {
     @Test
     void shouldSkipStatusWatermarkWhenDisabled() throws Exception {
         HtmlExportService service = new HtmlExportService(new PdfService());
-        OverlayProject project = new OverlayProject(
-                Path.of("sample.pdf"),
-                new PdfDocumentMetadata(Path.of("sample.pdf"), List.of(new PdfPageMetadata(0, 612, 792)))
-        );
+        OverlayProject project = createSinglePageProject();
         project.setStatusWatermarkEnabled(false);
 
         String htmlContent = service.buildHtmlContent(project, 300, false, ExportOptions.defaultOptions());
@@ -80,14 +75,12 @@ class HtmlExportServiceTest {
     @Test
     void shouldBuildEmbedFragmentWithoutTemplateOrMetadata() throws Exception {
         HtmlExportService service = new HtmlExportService(new PdfService());
-        OverlayProject project = new OverlayProject(
-                Path.of("sample.pdf"),
-                new PdfDocumentMetadata(Path.of("sample.pdf"), List.of(new PdfPageMetadata(0, 612, 792)))
-        );
+        OverlayProject project = createSinglePageProject();
         project.getOverlayPage(0).addElement(new OverlayElement(OverlayElementType.LABEL, 0.1, 0.1, 0.2, 0.05, "Customer"));
 
         String fragment = service.buildEmbedHtmlFragment(project, 300, false, ExportOptions.defaultOptions());
 
+        assertTrue(fragment.stripLeading().startsWith("<style>"));
         assertTrue(fragment.contains("<style>"));
         assertTrue(fragment.contains(".preprinted-page .preprinted-sheet"));
         assertTrue(fragment.contains("Customer"));
@@ -100,5 +93,57 @@ class HtmlExportServiceTest {
         assertFalse(fragment.contains("<html>"));
         assertFalse(fragment.contains("<body>"));
         assertFalse(fragment.contains("<style media=\"print\">"));
+    }
+
+    /**
+     * Verifica que el HTML standalone mantiene documento completo sin metadata editable.
+     */
+    @Test
+    void shouldBuildStandaloneBrowserHtmlWithTemplateButWithoutProjectMetadata() throws Exception {
+        HtmlExportService service = new HtmlExportService(new PdfService());
+        OverlayProject project = createSinglePageProject();
+        project.getOverlayPage(0).addElement(new OverlayElement(OverlayElementType.TEXT_FIELD, 0.5, 0.2, 0.1, 0.04, "textbox1"));
+
+        String htmlContent = service.buildStandaloneBrowserHtml(project, 300, false, ExportOptions.defaultOptions());
+
+        assertTrue(htmlContent.contains("<html>"));
+        assertTrue(htmlContent.contains("<head>"));
+        assertTrue(htmlContent.contains("<body>"));
+        assertTrue(htmlContent.contains("<div class=\"print-format\">"));
+        assertPrintStyleInsidePrintFormat(htmlContent);
+        assertTrue(htmlContent.contains("textbox1"));
+        assertTrue(htmlContent.contains("background-image:none;"));
+        assertFalse(htmlContent.contains("<div class=\"action-banner print-hide\">"));
+        assertFalse(htmlContent.contains(">...</div>"));
+        assertFalse(htmlContent.contains("{{ include_style('print.bundle.css') }}"));
+        assertFalse(htmlContent.contains("PDF_OVERLAY_METADATA_BEGIN"));
+        assertFalse(htmlContent.contains("data:image/png;base64"));
+    }
+
+    private OverlayProject createSinglePageProject() {
+        Path pdfPath = Path.of("sample.pdf");
+        return new OverlayProject(
+                pdfPath,
+                new PdfDocumentMetadata(pdfPath, List.of(new PdfPageMetadata(0, 612, 792)))
+        );
+    }
+
+    private String extractHead(String htmlContent) {
+        int headStart = htmlContent.indexOf("<head>");
+        int headEnd = htmlContent.indexOf("</head>");
+        if (headStart < 0 || headEnd < 0 || headEnd <= headStart) {
+            return "";
+        }
+        return htmlContent.substring(headStart, headEnd);
+    }
+
+    private void assertPrintStyleInsidePrintFormat(String htmlContent) {
+        assertFalse(extractHead(htmlContent).contains("<style>"));
+        int printFormatIndex = htmlContent.indexOf("<div class=\"print-format\">");
+        int styleIndex = htmlContent.indexOf("<style>", printFormatIndex);
+        int bodyIndex = htmlContent.indexOf("<div class=\"preprinted-sheet", printFormatIndex);
+        assertTrue(printFormatIndex >= 0);
+        assertTrue(styleIndex > printFormatIndex);
+        assertTrue(bodyIndex > styleIndex);
     }
 }

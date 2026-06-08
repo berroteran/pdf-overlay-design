@@ -116,10 +116,37 @@ class HtmlExportServiceTest {
 
         String fragment = service.buildEmbedHtmlFragment(project, 300, false, ExportOptions.defaultOptions());
 
+        assertTrue(fragment.contains("<!-- BEGIN TABLE: " + table.getId() + " -->"));
+        assertTrue(fragment.contains("<!-- END TABLE: " + table.getId() + " -->"));
         assertTrue(fragment.contains("<col style=\"width:30mm;\">"));
         assertTrue(fragment.contains("<col style=\"width:40mm;\">"));
         assertTrue(fragment.contains("<col style=\"width:37.95mm;\">"));
         assertFalse(fragment.contains("<col style=\"width:30%;\">"));
+    }
+
+    /**
+     * Verifica que el orden del HTML exportado siga la posición visual desde 0,0.
+     */
+    @Test
+    void shouldExportElementsOrderedByTopThenLeft() throws Exception {
+        HtmlExportService service = new HtmlExportService(new PdfService());
+        OverlayProject project = createSinglePageProject();
+        OverlayElement lower = new OverlayElement("lower", OverlayElementType.LABEL, 0.30, 0.40, 0.1, 0.03, "lower");
+        OverlayElement upperRight = new OverlayElement("upperRight", OverlayElementType.LABEL, 0.50, 0.10, 0.1, 0.03, "upperRight");
+        OverlayElement upperLeft = new OverlayElement("upperLeft", OverlayElementType.LABEL, 0.10, 0.10, 0.1, 0.03, "upperLeft");
+        project.getOverlayPage(0).addElement(lower);
+        project.getOverlayPage(0).addElement(upperRight);
+        project.getOverlayPage(0).addElement(upperLeft);
+
+        String fragment = service.buildEmbedHtmlFragment(project, 300, false, ExportOptions.defaultOptions());
+
+        int upperLeftIndex = fragment.indexOf("id=\"upperLeft\"");
+        int upperRightIndex = fragment.indexOf("id=\"upperRight\"");
+        int lowerIndex = fragment.indexOf("id=\"lower\"");
+
+        assertTrue(upperLeftIndex >= 0);
+        assertTrue(upperRightIndex > upperLeftIndex);
+        assertTrue(lowerIndex > upperRightIndex);
     }
 
     /**

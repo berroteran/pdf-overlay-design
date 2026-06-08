@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Comparator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -29,6 +30,10 @@ import java.util.logging.Logger;
  */
 public final class HtmlExportService {
     private static final Logger LOGGER = Logger.getLogger(HtmlExportService.class.getName());
+    private static final Comparator<OverlayElement> EXPORT_ELEMENT_ORDER = Comparator
+            .comparingDouble(OverlayElement::getYRatio)
+            .thenComparingDouble(OverlayElement::getXRatio)
+            .thenComparing(OverlayElement::getId, String.CASE_INSENSITIVE_ORDER);
 
     private static final String METADATA_BEGIN = "PDF_OVERLAY_METADATA_BEGIN";
     private static final String METADATA_END = "PDF_OVERLAY_METADATA_END";
@@ -321,123 +326,115 @@ public final class HtmlExportService {
                         }
                     """.formatted(rootSelector);
 
-        return """
-                * { box-sizing: border-box; }
-                %s
-                %s
-                %s
-                %s {
-                    position: relative;
-                    min-height: 100vh;
-                }
-                %s .preprinted-sheet {
-                    position: relative;
-                    page-break-after: always;
-                    break-after: page;
-                    margin: 0 0 12px 0;
-                    padding: 0;
-                    border: none;
-                    background-repeat: no-repeat;
-                    background-size: 100%% 100%%;
-                    background-position: top left;
-                    overflow: hidden;
-                }
-                %s .overlay-item {
-                    position: absolute;
-                    margin: 0;
-                    padding: 0;
-                    line-height: 1;
-                    white-space: pre-wrap;
-                }
-                %s .overlay-text {
-                    %s
-                    background: transparent;
-                    color: #0a0d11;
-                    %s
-                }
-                %s .overlay-label {
-                    color: #0a0d11;
-                    %s
-                    white-space: nowrap;
-                }
-                %s .overlay-button {
-                    border: 1px solid #3d4d5d;
-                    background: #e7edf4;
-                    color: #0a0d11;
-                    %s
-                    text-align: center;
-                }
-                %s .overlay-marker {
-                    border-radius: 999px;
-                    border: 1px solid #8d0000;
-                    background: #e00000;
-                }
-                %s table.overlay-table {
-                    position: absolute;
-                    table-layout: fixed;
-                    border-collapse: collapse;
-                    border-spacing: 0;
-                    background: transparent;
-                }
-                %s table.overlay-table > colgroup > col {
-                    border: none;
-                }
-                %s table.overlay-table > thead > tr > th {
-                    %s
-                    %s
-                    color: #0a0d11;
-                    %s
-                    font-weight: 700;
-                    padding: 2px 4px;
-                    line-height: 1;
-                    text-align: left;
-                    vertical-align: top;
-                }
-                %s table.overlay-table > tbody > tr > td {
-                    %s
-                    %s
-                    color: #0a0d11;
-                    %s
-                    padding: 2px 4px;
-                    line-height: 1;
-                    vertical-align: top;
-                }
-                @media print {
-                    %s
-                    %s .preprinted-sheet {
-                        margin: 0;
-                        border: none;
-                    }
-                }
-                """.formatted(
-                rootChrome,
-                watermarkCss,
-                pagePrintCss,
-                rootSelector,
-                rootSelector,
-                rootSelector,
-                rootSelector,
-                textFieldBorder,
-                fontSize10,
-                rootSelector,
-                fontSize10,
-                rootSelector,
-                fontSize9,
-                rootSelector,
-                fontSize9,
-                rootSelector,
-                rootSelector,
-                rootSelector,
-                tableHeaderBorder,
-                tableHeaderBackground,
-                fontSize10,
-                rootSelector,
-                tableCellBorder,
-                tableCellBackground,
-                fontSize10,
-                printRootReset,
-                rootSelector
-        );
+        StringBuilder css = new StringBuilder();
+        css.append("* { box-sizing: border-box; }\n");
+        appendCssBlock(css, rootChrome);
+        appendCssBlock(css, watermarkCss);
+        appendCssBlock(css, pagePrintCss);
+        css.append(rootSelector).append(" {\n")
+                .append("    position: relative;\n")
+                .append("    min-height: 100vh;\n")
+                .append("}\n");
+        css.append(rootSelector).append(" .preprinted-sheet {\n")
+                .append("    position: relative;\n")
+                .append("    page-break-after: always;\n")
+                .append("    break-after: page;\n")
+                .append("    margin: 0 0 12px 0;\n")
+                .append("    padding: 0;\n")
+                .append("    border: none;\n")
+                .append("    background-repeat: no-repeat;\n")
+                .append("    background-size: 100% 100%;\n")
+                .append("    background-position: top left;\n")
+                .append("    overflow: hidden;\n")
+                .append("}\n");
+        css.append(rootSelector).append(" .overlay-item {\n")
+                .append("    position: absolute;\n")
+                .append("    margin: 0;\n")
+                .append("    padding: 0;\n")
+                .append("    line-height: 1;\n")
+                .append("    white-space: pre-wrap;\n")
+                .append("}\n");
+        css.append(rootSelector).append(" .overlay-text {\n")
+                .append("    ").append(textFieldBorder).append('\n')
+                .append("    background: transparent;\n")
+                .append("    color: #0a0d11;\n")
+                .append("    ").append(fontSize10).append('\n')
+                .append("}\n");
+        css.append(rootSelector).append(" .overlay-label {\n")
+                .append("    color: #0a0d11;\n")
+                .append("    ").append(fontSize10).append('\n')
+                .append("    white-space: nowrap;\n")
+                .append("}\n");
+        css.append(rootSelector).append(" .overlay-button {\n")
+                .append("    border: 1px solid #3d4d5d;\n")
+                .append("    background: #e7edf4;\n")
+                .append("    color: #0a0d11;\n")
+                .append("    ").append(fontSize9).append('\n')
+                .append("    text-align: center;\n")
+                .append("}\n");
+        css.append(rootSelector).append(" .overlay-marker {\n")
+                .append("    border-radius: 999px;\n")
+                .append("    border: 1px solid #8d0000;\n")
+                .append("    background: #e00000;\n")
+                .append("}\n");
+        css.append(rootSelector).append(" table.overlay-table {\n")
+                .append("    position: absolute;\n")
+                .append("    table-layout: fixed;\n")
+                .append("    border-collapse: collapse;\n")
+                .append("    border-spacing: 0;\n")
+                .append("    background: transparent;\n")
+                .append("}\n");
+        css.append(rootSelector).append(" table.overlay-table > colgroup > col {\n")
+                .append("    border: none;\n")
+                .append("}\n");
+        css.append(rootSelector).append(" table.overlay-table > thead > tr > th {\n")
+                .append("    ").append(tableHeaderBorder).append('\n')
+                .append("    ").append(tableHeaderBackground).append('\n')
+                .append("    color: #0a0d11;\n")
+                .append("    ").append(fontSize10).append('\n')
+                .append("    font-weight: 700;\n")
+                .append("    padding: 2px 4px;\n")
+                .append("    line-height: 1;\n")
+                .append("    text-align: left;\n")
+                .append("    vertical-align: top;\n")
+                .append("}\n");
+        css.append(rootSelector).append(" table.overlay-table > tbody > tr > td {\n")
+                .append("    ").append(tableCellBorder).append('\n')
+                .append("    ").append(tableCellBackground).append('\n')
+                .append("    color: #0a0d11;\n")
+                .append("    ").append(fontSize10).append('\n')
+                .append("    padding: 2px 4px;\n")
+                .append("    line-height: 1;\n")
+                .append("    vertical-align: top;\n")
+                .append("}\n");
+        css.append("@media print {\n");
+        appendCssBlock(css, indentCssBlock(printRootReset, 1));
+        css.append("    ").append(rootSelector).append(" .preprinted-sheet {\n")
+                .append("        margin: 0;\n")
+                .append("        border: none;\n")
+                .append("    }\n")
+                .append("}\n");
+        return css.toString();
+    }
+
+    private void appendCssBlock(StringBuilder css, String block) {
+        if (block == null || block.isBlank()) {
+            return;
+        }
+        css.append(block.strip()).append('\n');
+    }
+
+    private String indentCssBlock(String block, int level) {
+        if (block == null || block.isBlank()) {
+            return "";
+        }
+        String indent = "    ".repeat(Math.max(0, level));
+        StringBuilder builder = new StringBuilder();
+        String[] lines = block.strip().split("\\R");
+        for (String line : lines) {
+            builder.append(indent).append(line).append('\n');
+        }
+        return builder.toString();
     }
 
     private String buildPageMarkup(PdfPageMetadata pageMetadata, OverlayPage overlayPage,
@@ -459,7 +456,7 @@ public final class HtmlExportService {
                 includePdfBackground ? "background-image:url('" + escapeHtml(imageDataUri) + "');" : "background-image:none;"
         ).replace("\n", "")));
 
-        for (OverlayElement element : overlayPage.mutableElements()) {
+        for (OverlayElement element : sortedElementsForExport(overlayPage)) {
             builder.append(buildElementMarkup(element, pageMetadata));
         }
         builder.append("""
@@ -508,6 +505,9 @@ public final class HtmlExportService {
         List<String> headers = parseTableHeaders(element.getText(), columnCount);
 
         StringBuilder builder = new StringBuilder();
+        builder.append("<!-- BEGIN TABLE: ")
+                .append(elementId)
+                .append(" -->\n");
         builder.append("<table id=\"")
                 .append(elementId)
                 .append("\" class=\"overlay-item overlay-table\" style=\"")
@@ -539,8 +539,17 @@ public final class HtmlExportService {
             builder.append("</tr>\n");
         }
         builder.append("</tbody>\n</table>\n");
+        builder.append("<!-- END TABLE: ")
+                .append(elementId)
+                .append(" -->\n");
 
         return builder.toString();
+    }
+
+    private List<OverlayElement> sortedElementsForExport(OverlayPage overlayPage) {
+        List<OverlayElement> elements = new ArrayList<>(overlayPage.mutableElements());
+        elements.sort(EXPORT_ELEMENT_ORDER);
+        return elements;
     }
 
     private String buildMetadataComment(OverlayProject project, HtmlTemplateType templateType) {

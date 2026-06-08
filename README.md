@@ -24,7 +24,7 @@ Resolver el diseño de formatos preimpresos con medidas físicas reales:
 - Historial persistente de archivos recientes, máximo 10 entradas.
 - Toolbar superior para impresión, navegador y herramientas de edición.
 - Barra inferior compacta con navegación de páginas y zoom.
-- Vista `Graphic Mode` y vista `HTML Source`.
+- Tabs `Graphic Mode`, `HTML Source` y `Final Source`.
 - Guardado de proyecto separado de exportación.
 - Exportación ERPNext sin imagen original y sin metadata editable.
 - Impresión PDF/imagen original.
@@ -67,6 +67,9 @@ proyecto.
 `Export ERPNext...` genera el HTML para usar en Print Format. Esta salida no
 incluye metadata editable ni imagen original. El export empieza directamente
 con los estilos de la aplicación dentro del body lógico del formato:
+
+El tab `Final Source` muestra este mismo fragmento exportable antes de guardar
+el archivo.
 
 ```html
 <style>

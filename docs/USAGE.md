@@ -81,6 +81,10 @@ Guardar proyecto no muestra opciones de exportación.
 `Export ERPNext...` genera el fragmento que debe insertarse en Print Format.
 La salida no incluye imagen original ni metadata editable.
 
+El tab `Final Source` muestra el fragmento final equivalente al export ERPNext.
+Sirve para revisar exactamente el código que se generaría antes de escribir el
+archivo.
+
 El fragmento exportado empieza así:
 
 ```html

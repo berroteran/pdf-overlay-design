@@ -619,9 +619,13 @@ public final class MainViewController {
         openProjectMenuItem.setOnAction(event -> openHtmlFile());
         openProjectMenuItem.setGraphic(ButtonIconFactory.openHtmlIcon());
 
-        MenuItem saveProjectMenuItem = new MenuItem("Save Project As...");
+        MenuItem saveProjectMenuItem = new MenuItem("Save Project");
         saveProjectMenuItem.setOnAction(event -> saveProjectHtml());
         saveProjectMenuItem.setGraphic(ButtonIconFactory.saveHtmlIcon());
+
+        MenuItem saveProjectAsMenuItem = new MenuItem("Save Project As...");
+        saveProjectAsMenuItem.setOnAction(event -> saveProjectHtmlAs());
+        saveProjectAsMenuItem.setGraphic(ButtonIconFactory.saveHtmlIcon());
 
         MenuItem exportErpNextMenuItem = new MenuItem("Export ERPNext...");
         exportErpNextMenuItem.setOnAction(event -> exportErpNextFragment());
@@ -661,6 +665,7 @@ public final class MainViewController {
                 openMenu,
                 new SeparatorMenuItem(),
                 saveProjectMenuItem,
+                saveProjectAsMenuItem,
                 exportErpNextMenuItem,
                 openHtmlOnlyInBrowserMenuItem,
                 new SeparatorMenuItem(),
@@ -2262,18 +2267,29 @@ public final class MainViewController {
             return false;
         }
 
-        Optional<SaveExportSelection> exportSelection = showExportOptionsDialog();
-        if (exportSelection.isEmpty()) {
-            statusLabel.setText("Save cancelled");
+        if (currentHtmlPath == null) {
+            return saveProjectHtmlAs();
+        }
+
+        return saveProjectHtmlTo(currentHtmlPath, false);
+    }
+
+    private boolean saveProjectHtmlAs() {
+        if (currentProject == null) {
+            statusLabel.setText("Open a PDF first");
             return false;
         }
 
-        Path targetHtmlPath = resolveHtmlPath("Save HTML project as", "-project.html");
+        Path targetHtmlPath = resolveProjectHtmlPath("Save HTML project as", "-project.html");
         if (targetHtmlPath == null) {
             statusLabel.setText("Save cancelled");
             return false;
         }
 
+        return saveProjectHtmlTo(targetHtmlPath, true);
+    }
+
+    private boolean saveProjectHtmlTo(Path targetHtmlPath, boolean showConfirmation) {
         try {
             int selectedDpi = getSelectedExportDpi();
             Path htmlPath = htmlExportService.exportProjectAsHtml(
@@ -2281,15 +2297,17 @@ public final class MainViewController {
                     targetHtmlPath,
                     selectedDpi,
                     true,
-                    exportSelection.get().exportOptions()
+                    ExportOptions.defaultOptions()
             );
             currentHtmlPath = htmlPath;
             hasUnsavedChanges = false;
             statusLabel.setText("Project saved: " + htmlPath.getFileName());
-            Alert info = new Alert(Alert.AlertType.INFORMATION, "HTML generated at:\n" + htmlPath, ButtonType.OK);
-            info.setHeaderText("Project saved");
-            info.initOwner(ownerStage);
-            info.showAndWait();
+            if (showConfirmation) {
+                Alert info = new Alert(Alert.AlertType.INFORMATION, "Project saved at:\n" + htmlPath, ButtonType.OK);
+                info.setHeaderText("Project saved");
+                info.initOwner(ownerStage);
+                info.showAndWait();
+            }
             return true;
         } catch (IOException ex) {
             LOGGER.log(Level.SEVERE, "Error saving HTML project", ex);
@@ -2361,7 +2379,7 @@ public final class MainViewController {
             return;
         }
 
-        Path targetHtmlPath = resolveHtmlPath("Export ERPNext HTML as", "-erpnext-fragment.html");
+        Path targetHtmlPath = resolveExportHtmlPath("Export ERPNext HTML as", "-erpnext-fragment.html");
         if (targetHtmlPath == null) {
             return;
         }
@@ -2779,24 +2797,37 @@ public final class MainViewController {
         return dialog.showAndWait();
     }
 
-    private Path resolveHtmlPath(String dialogTitle, String defaultSuffix) {
+    private Path resolveProjectHtmlPath(String dialogTitle, String defaultSuffix) {
+        Path initialPath = currentHtmlPath;
+        if (initialPath == null && currentProject != null) {
+            initialPath = currentProject.getPdfPath();
+        }
+        return resolveHtmlPath(dialogTitle, defaultSuffix, initialPath);
+    }
+
+    private Path resolveExportHtmlPath(String dialogTitle, String defaultSuffix) {
+        Path initialPath = currentProject == null ? null : currentProject.getPdfPath();
+        return resolveHtmlPath(dialogTitle, defaultSuffix, initialPath);
+    }
+
+    private Path resolveHtmlPath(String dialogTitle, String defaultSuffix, Path initialPath) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle(dialogTitle);
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("HTML files", "*.html"));
 
-        if (currentHtmlPath != null) {
-            Path parent = currentHtmlPath.toAbsolutePath().getParent();
+        if (initialPath != null) {
+            Path parent = initialPath.toAbsolutePath().getParent();
             if (parent != null && Files.exists(parent)) {
                 chooser.setInitialDirectory(parent.toFile());
             }
-            chooser.setInitialFileName(currentHtmlPath.getFileName().toString());
-        } else if (currentProject != null) {
-            Path pdfPath = currentProject.getPdfPath();
-            Path parent = pdfPath.toAbsolutePath().getParent();
-            if (parent != null && Files.exists(parent)) {
-                chooser.setInitialDirectory(parent.toFile());
+
+            String initialFileName = initialPath.getFileName().toString();
+            if (initialFileName.toLowerCase(Locale.US).endsWith(".html")
+                    || initialFileName.toLowerCase(Locale.US).endsWith(".htm")) {
+                chooser.setInitialFileName(initialFileName);
+            } else {
+                chooser.setInitialFileName(stripExtension(initialFileName) + defaultSuffix);
             }
-            chooser.setInitialFileName(stripExtension(pdfPath.getFileName().toString()) + defaultSuffix);
         }
 
         java.io.File selectedFile = chooser.showSaveDialog(ownerStage);

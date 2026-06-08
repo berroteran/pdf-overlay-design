@@ -35,6 +35,8 @@ public final class HtmlExportService {
     private static final String TEMPLATE_CODE_PREFIX = "HTML_TEMPLATE=";
     private static final String PRINT_STYLE_PLACEHOLDER = "{{ print_style }}";
     private static final String BODY_PLACEHOLDER = "{{ body }}";
+    private static final String ROOT_SELECTOR_BODY = "body";
+    private static final String ROOT_SELECTOR_FRAGMENT = ".preprinted-page";
 
     private final PdfService pdfService;
     private final HtmlTemplateRepository htmlTemplateRepository;
@@ -142,7 +144,7 @@ public final class HtmlExportService {
         }
 
         StringBuilder html = new StringBuilder();
-        String printStyle = buildPrintStyle(project, exportOptions);
+        String printStyle = buildPrintStyle(project, exportOptions, ROOT_SELECTOR_BODY, true);
         StringBuilder bodyContent = new StringBuilder();
         String bodyAttributes = buildBodyAttributes(project);
 
@@ -154,7 +156,7 @@ public final class HtmlExportService {
                 imageDataUri = "data:image/png;base64," + Base64.getEncoder().encodeToString(pngBytes);
             }
             OverlayPage overlayPage = project.getOverlayPage(pageIndex);
-            bodyContent.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground));
+            bodyContent.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground, true));
         }
 
         html.append(renderUsingTemplate(printStyle, bodyContent.toString(), bodyAttributes));
@@ -180,7 +182,8 @@ public final class HtmlExportService {
             throw new IllegalArgumentException("renderDpi must be > 0");
         }
 
-        String printStyle = buildPrintStyle(project, exportOptions);
+        String rootClass = buildFragmentRootClass(project);
+        String printStyle = buildPrintStyle(project, exportOptions, ROOT_SELECTOR_FRAGMENT, false);
         StringBuilder bodyContent = new StringBuilder();
 
         for (PdfPageMetadata pageMetadata : project.getMetadata().getPages()) {
@@ -191,15 +194,17 @@ public final class HtmlExportService {
                 imageDataUri = "data:image/png;base64," + Base64.getEncoder().encodeToString(pngBytes);
             }
             OverlayPage overlayPage = project.getOverlayPage(pageIndex);
-            bodyContent.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground));
+            bodyContent.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground, false));
         }
 
         return """
                 <style>
                 %s
                 </style>
+                <div class="%s">
                 %s
-                """.formatted(printStyle, bodyContent);
+                </div>
+                """.formatted(printStyle, rootClass, bodyContent);
     }
 
     /**
@@ -220,15 +225,16 @@ public final class HtmlExportService {
         return parseProject(metadata);
     }
 
-    private String buildPrintStyle(OverlayProject project, ExportOptions options) {
+    private String buildPrintStyle(OverlayProject project, ExportOptions options,
+                                   String rootSelector, boolean includeBodyPageChrome) {
         DocumentStatus documentStatus = project.getDocumentStatus();
         boolean statusWatermarkEnabled = project.isStatusWatermarkEnabled();
         String statusClass = statusWatermarkEnabled ? documentStatus.getBodyClass() : "";
         String statusText = escapeHtml(documentStatus.getWatermarkText());
         String watermarkCss = statusWatermarkEnabled
                 ? """
-                        body.status-draft::before,
-                        body.status-voided::before {
+                        %s.status-draft::before,
+                        %s.status-voided::before {
                             position: fixed;
                             top: 50%%;
                             left: 50%%;
@@ -242,9 +248,9 @@ public final class HtmlExportService {
                             z-index: 9999;
                             white-space: nowrap;
                         }
-                        body.status-draft::before { content: "%s"; }
-                        body.status-voided::before { content: "ANULADO"; }
-                    """.formatted(statusText)
+                        %s.status-draft::before { content: "%s"; }
+                        %s.status-voided::before { content: "ANULADO"; }
+                    """.formatted(rootSelector, rootSelector, rootSelector, statusText, rootSelector)
                 : "";
         String fontFamily = options.exportFont() ? "font-family: \"Segoe UI\", Tahoma, sans-serif;" : "";
         String fontSize10 = options.exportFont() ? "font-size: 10pt;" : "";
@@ -258,20 +264,44 @@ public final class HtmlExportService {
         String tableCellBackground = options.exportTableColors()
                 ? "background: rgba(255, 255, 255, 0.55);"
                 : "background: transparent;";
+        String rootChrome = includeBodyPageChrome
+                ? """
+                        %s {
+                            margin: 0;
+                            padding: 12px;
+                            background: #f0f2f4;
+                            %s
+                        }
+                    """.formatted(rootSelector, fontFamily)
+                : """
+                        %s {
+                            position: relative;
+                            width: 100%%;
+                            %s
+                        }
+                    """.formatted(rootSelector, fontFamily);
+        String printRootReset = includeBodyPageChrome
+                ? """
+                        %s {
+                            margin: 0;
+                            padding: 0;
+                            background: white;
+                        }
+                    """.formatted(rootSelector)
+                : """
+                        %s {
+                            background: transparent;
+                        }
+                    """.formatted(rootSelector);
 
         return """
                 * { box-sizing: border-box; }
-                body {
-                    margin: 0;
-                    padding: 12px;
-                    background: #f0f2f4;
-                    %s
-                }
                 %s
-                .print-format {
+                %s
+                %s {
                     min-height: 100vh;
                 }
-                table.print-page {
+                %s table.print-page {
                     position: relative;
                     page-break-after: always;
                     break-after: page;
@@ -286,61 +316,61 @@ public final class HtmlExportService {
                     background-position: center center;
                     overflow: hidden;
                 }
-                table.print-page > tbody > tr > td {
+                %s table.print-page > tbody > tr > td {
                     padding: 0;
                     margin: 0;
                     border: none;
                 }
-                .overlay-canvas {
+                %s .overlay-canvas {
                     width: 100%%;
                     height: 100%%;
                 }
-                table.overlay-item {
+                %s table.overlay-item {
                     position: absolute;
                     border-collapse: collapse;
                     border-spacing: 0;
                     transform-origin: top left;
                 }
-                table.overlay-item > tbody > tr > td {
+                %s table.overlay-item > tbody > tr > td {
                     margin: 0;
                     padding: 1px 2px;
                     vertical-align: top;
                     line-height: 1.15;
                 }
-                table.overlay-text > tbody > tr > td {
+                %s table.overlay-text > tbody > tr > td {
                     %s
                     background: rgba(255, 255, 255, 0.15);
                     color: #0a0d11;
                     %s
                 }
-                table.overlay-label > tbody > tr > td {
+                %s table.overlay-label > tbody > tr > td {
                     color: #0a0d11;
                     %s
                     white-space: nowrap;
                 }
-                table.overlay-button > tbody > tr > td {
+                %s table.overlay-button > tbody > tr > td {
                     border: 1px solid #3d4d5d;
                     background: #e7edf4;
                     color: #0a0d11;
                     %s
                     text-align: center;
                 }
-                table.overlay-marker > tbody > tr > td {
+                %s table.overlay-marker > tbody > tr > td {
                     padding: 0;
                     border-radius: 999px;
                     border: 1px solid #8d0000;
                     background: #e00000;
                 }
-                table.overlay-table {
+                %s table.overlay-table {
                     table-layout: fixed;
                     border-collapse: collapse;
                     border-spacing: 0;
                     background: transparent;
                 }
-                table.overlay-table > colgroup > col {
+                %s table.overlay-table > colgroup > col {
                     border: none;
                 }
-                table.overlay-table > thead > tr > th {
+                %s table.overlay-table > thead > tr > th {
                     %s
                     %s
                     color: #0a0d11;
@@ -350,7 +380,7 @@ public final class HtmlExportService {
                     text-align: left;
                     vertical-align: top;
                 }
-                table.overlay-table > tbody > tr > td {
+                %s table.overlay-table > tbody > tr > td {
                     %s
                     %s
                     color: #0a0d11;
@@ -359,50 +389,65 @@ public final class HtmlExportService {
                     vertical-align: top;
                 }
                 @media print {
-                    body {
-                        margin: 0;
-                        padding: 0;
-                        background: white;
-                    }
-                    table.print-page {
+                    %s
+                    %s table.print-page {
                         margin: 0;
                         border: none;
                     }
                 }
                 """.formatted(
-                fontFamily,
+                rootChrome,
                 watermarkCss,
+                rootSelector,
+                rootSelector,
+                rootSelector,
+                rootSelector,
+                rootSelector,
+                rootSelector,
+                rootSelector,
                 textFieldBorder,
                 fontSize10,
+                rootSelector,
                 fontSize10,
+                rootSelector,
+                rootSelector,
                 fontSize9,
+                rootSelector,
+                rootSelector,
+                rootSelector,
                 tableHeaderBorder,
                 tableHeaderBackground,
                 fontSize10,
+                rootSelector,
                 tableCellBorder,
                 tableCellBackground,
-                fontSize10
+                fontSize10,
+                printRootReset,
+                rootSelector
         );
     }
 
     private String buildPageMarkup(PdfPageMetadata pageMetadata, OverlayPage overlayPage,
-                                   String imageDataUri, boolean includePdfBackground) {
+                                   String imageDataUri, boolean includePdfBackground,
+                                   boolean includePagePrintStyle) {
         String widthInches = formatDouble(pageMetadata.widthInches());
         String heightInches = formatDouble(pageMetadata.heightInches());
 
         String pageClass = "page-" + (pageMetadata.pageIndex() + 1);
         StringBuilder builder = new StringBuilder();
-        builder.append("""
-                <style media="print">
-                    @page %s {
-                        size: %sin %sin;
-                        margin: 0;
-                    }
-                    .%s {
-                        page: %s;
-                    }
-                </style>
-                """.formatted(pageClass, widthInches, heightInches, pageClass, pageClass));
+        if (includePagePrintStyle) {
+            builder.append("""
+                    <style media="print">
+                        @page %s {
+                            size: %sin %sin;
+                            margin: 0;
+                        }
+                        .%s {
+                            page: %s;
+                        }
+                    </style>
+                    """.formatted(pageClass, widthInches, heightInches, pageClass, pageClass));
+        }
 
         builder.append("""
                 <table class="print-page %s" style="%s">
@@ -567,6 +612,13 @@ public final class HtmlExportService {
             return "";
         }
         return " class=\"" + project.getDocumentStatus().getBodyClass() + "\"";
+    }
+
+    private String buildFragmentRootClass(OverlayProject project) {
+        if (!project.isStatusWatermarkEnabled()) {
+            return "preprinted-page";
+        }
+        return "preprinted-page " + project.getDocumentStatus().getBodyClass();
     }
 
     private void appendMetadataBeforeClosingBody(StringBuilder html, String metadataComment) {

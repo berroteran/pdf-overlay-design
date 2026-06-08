@@ -87,11 +87,13 @@ class HtmlExportServiceTest {
         String fragment = service.buildEmbedHtmlFragment(project, 300, false, ExportOptions.defaultOptions());
 
         assertTrue(fragment.contains("<style>"));
-        assertTrue(fragment.contains("table.print-page"));
+        assertTrue(fragment.contains(".preprinted-page table.print-page"));
         assertTrue(fragment.contains("Customer"));
+        assertTrue(fragment.contains("<div class=\"preprinted-page\">"));
         assertFalse(fragment.contains("{{ include_style('print.bundle.css') }}"));
         assertFalse(fragment.contains("PDF_OVERLAY_METADATA_BEGIN"));
         assertFalse(fragment.contains("<html>"));
         assertFalse(fragment.contains("<body>"));
+        assertFalse(fragment.contains("<style media=\"print\">"));
     }
 }

@@ -11,6 +11,7 @@ import com.example.pdfoverlay.service.ExportOptions;
 import com.example.pdfoverlay.service.HtmlExportService;
 import com.example.pdfoverlay.service.PdfService;
 import com.example.pdfoverlay.service.PrintService;
+import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
@@ -130,6 +131,7 @@ public final class MainViewController {
     private final Tab htmlSourceTab;
     private final WebView htmlSourceWebView;
     private final ComboBox<String> sourceBlockSelector;
+    private final ComboBox<UiTheme> themeSelector;
 
     private final ToggleGroup toolToggleGroup;
     private final Label pageLabel;
@@ -171,9 +173,13 @@ public final class MainViewController {
     private boolean autoFitZoomOnNextLoad;
     private int autoFitPendingAttempts;
     private String latestGeneratedHtmlSource;
+    private UiTheme activeTheme;
 
     private double currentPagePixelWidth;
     private double currentPagePixelHeight;
+    private boolean hasUnsavedChanges;
+    private boolean suppressChangeTracking;
+    private boolean bypassCloseConfirmation;
 
     /**
      * Crea el controlador principal y sus componentes visuales.
@@ -201,6 +207,7 @@ public final class MainViewController {
         this.htmlSourceTab = new Tab("HTML Source");
         this.htmlSourceWebView = new WebView();
         this.sourceBlockSelector = new ComboBox<>();
+        this.themeSelector = new ComboBox<>();
 
         this.toolToggleGroup = new ToggleGroup();
         this.pageLabel = new Label("Page -/-");
@@ -240,21 +247,33 @@ public final class MainViewController {
         this.currentHtmlPath = null;
         this.currentPagePixelWidth = DEFAULT_CANVAS_WIDTH;
         this.currentPagePixelHeight = DEFAULT_CANVAS_HEIGHT;
+        this.hasUnsavedChanges = false;
+        this.suppressChangeTracking = false;
+        this.bypassCloseConfirmation = false;
         this.autoFitZoomOnNextLoad = false;
         this.autoFitPendingAttempts = 0;
         this.latestGeneratedHtmlSource = "<!-- Open a PDF or HTML project first -->";
+        this.activeTheme = UiTheme.MODENA;
 
         configureCanvas();
         configureActions();
+        configureThemeSelector();
         zoomValueLabel.setText(formatZoomPercentage(zoomSlider.getValue()));
 
+        root.getStyleClass().add("theme-root");
         root.setTop(buildTopArea());
         root.setCenter(buildWorkspacePane());
         root.setRight(buildInspectorPanel());
         root.setBottom(buildStatusBar());
         root.setFocusTraversable(true);
+        root.sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene != null) {
+                applyTheme(activeTheme);
+            }
+        });
 
         updateButtonsState();
+        installCloseHandler();
     }
 
     /**
@@ -286,6 +305,7 @@ public final class MainViewController {
         canvasScrollPane.setPannable(true);
         canvasScrollPane.setFitToHeight(false);
         canvasScrollPane.setFitToWidth(false);
+        canvasScrollPane.getStyleClass().add("editor-scroll-pane");
 
         topRulerCanvas.setHeight(RULER_SIZE);
         leftRulerCanvas.setWidth(RULER_SIZE);
@@ -316,7 +336,7 @@ public final class MainViewController {
             if (event.isShortcutDown()) {
                 switch (event.getCode()) {
                     case Q -> {
-                        Platform.exit();
+                        requestApplicationClose();
                         event.consume();
                     }
                     case PLUS, ADD -> {
@@ -367,6 +387,7 @@ public final class MainViewController {
                 return;
             }
             currentProject.setStatusWatermarkEnabled(newValue);
+            markProjectDirty();
             statusLabel.setText(newValue
                     ? "Status watermark enabled: " + currentProject.getDocumentStatus().getWatermarkText()
                     : "Status watermark disabled");
@@ -379,6 +400,7 @@ public final class MainViewController {
                 return;
             }
             currentProject.setDocumentStatus(newValue);
+            markProjectDirty();
             statusLabel.setText("Document status: " + newValue.getWatermarkText());
             if (workspaceTabPane.getSelectionModel().getSelectedItem() == htmlSourceTab) {
                 refreshHtmlSourcePreview();
@@ -428,6 +450,18 @@ public final class MainViewController {
         canvasScrollPane.hvalueProperty().addListener((obs, oldValue, newValue) -> redrawMeasurementGuides());
         canvasScrollPane.vvalueProperty().addListener((obs, oldValue, newValue) -> redrawMeasurementGuides());
         canvasScrollPane.viewportBoundsProperty().addListener((obs, oldValue, newValue) -> redrawMeasurementGuides());
+    }
+
+    private void configureThemeSelector() {
+        themeSelector.getItems().addAll(UiTheme.values());
+        themeSelector.setValue(activeTheme);
+        themeSelector.setVisibleRowCount(UiTheme.values().length);
+        themeSelector.getStyleClass().add("theme-selector");
+        themeSelector.valueProperty().addListener((obs, oldValue, newValue) -> {
+            if (newValue != null) {
+                applyTheme(newValue);
+            }
+        });
     }
 
     private Node buildWorkspacePane() {
@@ -502,7 +536,7 @@ public final class MainViewController {
         printPdfMenuItem.setOnAction(event -> printPdfDocument());
 
         MenuItem exitMenuItem = new MenuItem("Exit");
-        exitMenuItem.setOnAction(event -> Platform.exit());
+        exitMenuItem.setOnAction(event -> requestApplicationClose());
 
         Menu fileMenu = new Menu("File");
         fileMenu.getItems().addAll(
@@ -557,6 +591,10 @@ public final class MainViewController {
         ToggleButton buttonToolButton = createToolButton("Button", EditorTool.BUTTON, false, ButtonIconFactory.buttonToolIcon());
         ToggleButton markerToolButton = createToolButton("Point", EditorTool.MARKER, false, ButtonIconFactory.markerToolIcon());
         ToggleButton tableToolButton = createToolButton("Table", EditorTool.TABLE, false, ButtonIconFactory.tableToolIcon());
+        Label themeLabel = new Label("Theme");
+        themeLabel.getStyleClass().add("status-meta");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
 
         HBox toolbar = new HBox(
                 10,
@@ -576,7 +614,10 @@ public final class MainViewController {
                 labelToolButton,
                 buttonToolButton,
                 markerToolButton,
-                tableToolButton
+                tableToolButton,
+                spacer,
+                themeLabel,
+                themeSelector
         );
         toolbar.setPadding(new Insets(10));
         toolbar.setAlignment(Pos.CENTER_LEFT);
@@ -718,6 +759,7 @@ public final class MainViewController {
         }
 
         try {
+            suppressChangeTracking = true;
             Path pdfPath = selectedFile.toPath();
             PdfDocumentMetadata metadata = pdfService.loadMetadata(pdfPath);
             currentProject = new OverlayProject(pdfPath, metadata);
@@ -725,6 +767,8 @@ public final class MainViewController {
             autoFitPendingAttempts = AUTO_FIT_MAX_ATTEMPTS;
             currentHtmlPath = null;
             currentPageIndex = 0;
+            hasUnsavedChanges = false;
+            deletedElementsHistory.clear();
             clearSelection();
             loadCurrentPage();
             statusLabel.setText("Loaded PDF: " + pdfPath.getFileName());
@@ -734,6 +778,7 @@ public final class MainViewController {
             showError("Cannot open PDF", ex.getMessage());
         } finally {
             updateButtonsState();
+            suppressChangeTracking = false;
         }
     }
 
@@ -748,6 +793,7 @@ public final class MainViewController {
         }
 
         try {
+            suppressChangeTracking = true;
             Path htmlPath = selectedFile.toPath();
             OverlayProject loadedProject = htmlExportService.loadProjectFromHtml(htmlPath);
             currentProject = loadedProject;
@@ -756,6 +802,8 @@ public final class MainViewController {
             autoFitPendingAttempts = AUTO_FIT_MAX_ATTEMPTS;
             currentHtmlPath = htmlPath;
             currentPageIndex = 0;
+            hasUnsavedChanges = false;
+            deletedElementsHistory.clear();
             clearSelection();
             loadCurrentPage();
             statusLabel.setText("Loaded HTML: " + htmlPath.getFileName());
@@ -765,6 +813,7 @@ public final class MainViewController {
             showError("Cannot open HTML", ex.getMessage());
         } finally {
             updateButtonsState();
+            suppressChangeTracking = false;
         }
     }
 
@@ -853,10 +902,11 @@ public final class MainViewController {
         double minorStepPixels = pixelsPerCm * GRID_MINOR_CM;
         double majorStepPixels = pixelsPerCm * GRID_MAJOR_CM;
         double epsilon = 0.01d;
+        UiTheme theme = activeTheme == null ? UiTheme.MODENA : activeTheme;
 
         for (double position = 0.0d; position <= length + epsilon; position += minorStepPixels) {
             boolean majorLine = isMajorMeasurement(position, majorStepPixels);
-            graphics.setStroke(majorLine ? Color.rgb(42, 91, 135, 0.45) : Color.rgb(42, 91, 135, 0.18));
+            graphics.setStroke(majorLine ? theme.getGridMajor() : theme.getGridMinor());
             graphics.setLineWidth(majorLine ? 1.0d : 0.6d);
             if (verticalLines) {
                 graphics.strokeLine(position, 0, position, gridCanvas.getHeight());
@@ -877,9 +927,10 @@ public final class MainViewController {
         topRulerCanvas.setVisible(showMeasurementGridCheck.isSelected() && currentProject != null);
 
         GraphicsContext graphics = topRulerCanvas.getGraphicsContext2D();
-        graphics.setFill(Color.rgb(245, 248, 252));
+        UiTheme theme = activeTheme == null ? UiTheme.MODENA : activeTheme;
+        graphics.setFill(theme.getRulerBackground());
         graphics.fillRect(0, 0, width, RULER_SIZE);
-        graphics.setStroke(Color.rgb(175, 188, 201));
+        graphics.setStroke(theme.getRulerBorder());
         graphics.strokeRect(0, 0, Math.max(0.0d, width - 0.5d), Math.max(0.0d, RULER_SIZE - 0.5d));
 
         if (!topRulerCanvas.isVisible()) {
@@ -904,9 +955,10 @@ public final class MainViewController {
         leftRulerCanvas.setVisible(showMeasurementGridCheck.isSelected() && currentProject != null);
 
         GraphicsContext graphics = leftRulerCanvas.getGraphicsContext2D();
-        graphics.setFill(Color.rgb(245, 248, 252));
+        UiTheme theme = activeTheme == null ? UiTheme.MODENA : activeTheme;
+        graphics.setFill(theme.getRulerBackground());
         graphics.fillRect(0, 0, RULER_SIZE, height);
-        graphics.setStroke(Color.rgb(175, 188, 201));
+        graphics.setStroke(theme.getRulerBorder());
         graphics.strokeRect(0, 0, Math.max(0.0d, RULER_SIZE - 0.5d), Math.max(0.0d, height - 0.5d));
 
         if (!leftRulerCanvas.isVisible()) {
@@ -931,10 +983,11 @@ public final class MainViewController {
         double majorStep = pixelsPerCm * GRID_MAJOR_CM;
         double startMeasurement = Math.max(0.0d, Math.floor(scrollOffset / minorStep) * GRID_MINOR_CM);
         double endMeasurement = (scrollOffset + rulerLength) / pixelsPerCm;
+        UiTheme theme = activeTheme == null ? UiTheme.MODENA : activeTheme;
 
         graphics.setFont(Font.font("Segoe UI", 10));
-        graphics.setFill(Color.rgb(36, 60, 82));
-        graphics.setStroke(Color.rgb(63, 92, 122));
+        graphics.setFill(theme.getRulerText());
+        graphics.setStroke(theme.getRulerTick());
         graphics.setTextAlign(horizontal ? TextAlignment.CENTER : TextAlignment.LEFT);
 
         for (double measurementCm = startMeasurement; measurementCm <= endMeasurement + 0.01d;
@@ -1155,6 +1208,7 @@ public final class MainViewController {
             dragState.dragStartMouseY = event.getSceneY();
             dragState.dragStartNodeX = node.getLayoutX();
             dragState.dragStartNodeY = node.getLayoutY();
+            dragState.moved = false;
             event.consume();
         });
 
@@ -1177,6 +1231,15 @@ public final class MainViewController {
 
             node.relocate(nextX, nextY);
             updateElementFromNode(element, node);
+            dragState.moved = true;
+            event.consume();
+        });
+
+        node.setOnMouseReleased(event -> {
+            if (dragState.moved) {
+                markProjectDirty();
+                statusLabel.setText("Element moved");
+            }
             event.consume();
         });
 
@@ -1212,6 +1275,7 @@ public final class MainViewController {
         OverlayElement newElement = createElementFromTool(activeTool, x, y, requestedTableColumns);
         OverlayPage page = currentProject.getOverlayPage(currentPageIndex);
         page.addElement(newElement);
+        markProjectDirty();
 
         Region node = createVisualNode(newElement);
         overlayPane.getChildren().add(node);
@@ -1347,6 +1411,7 @@ public final class MainViewController {
         }
         String newText = Optional.ofNullable(selectedElementTextField.getText()).orElse("").strip();
         selectedElement.setText(newText);
+        markProjectDirty();
 
         if (selectedNode instanceof Label labelNode) {
             labelNode.setText(resolveDefaultText(selectedElement));
@@ -1382,6 +1447,7 @@ public final class MainViewController {
         }
 
         selectedElement.setId(newId);
+        markProjectDirty();
         Region node = elementNodes.remove(oldId);
         if (node != null) {
             elementNodes.put(newId, node);
@@ -1424,6 +1490,7 @@ public final class MainViewController {
             tableColumnWidthsField.setText(normalizedWidths);
 
             refreshVisualNode(selectedElement);
+            markProjectDirty();
             statusLabel.setText("Table configuration updated");
         } catch (Exception ex) {
             showError("Invalid table configuration", ex.getMessage());
@@ -1487,6 +1554,7 @@ public final class MainViewController {
         if (removed && node != null) {
             deletedElementsHistory.push(new DeletedElementSnapshot(removedPageIndex, removedCopy));
             overlayPane.getChildren().remove(node);
+            markProjectDirty();
             statusLabel.setText("Element removed");
         }
         clearSelection();
@@ -1519,6 +1587,7 @@ public final class MainViewController {
         } else {
             clearSelection();
         }
+        markProjectDirty();
         statusLabel.setText("Deletion undone");
     }
 
@@ -1828,21 +1897,22 @@ public final class MainViewController {
         }
     }
 
-    private void saveProjectHtml() {
+    private boolean saveProjectHtml() {
         if (currentProject == null) {
             statusLabel.setText("Open a PDF first");
-            return;
+            return false;
         }
 
         Optional<SaveExportSelection> exportSelection = showExportOptionsDialog();
         if (exportSelection.isEmpty()) {
             statusLabel.setText("Save cancelled");
-            return;
+            return false;
         }
 
         Path targetHtmlPath = resolveHtmlPath("Save HTML project as", "-project.html");
         if (targetHtmlPath == null) {
-            return;
+            statusLabel.setText("Save cancelled");
+            return false;
         }
 
         try {
@@ -1855,15 +1925,69 @@ public final class MainViewController {
                     exportSelection.get().exportOptions()
             );
             currentHtmlPath = htmlPath;
+            hasUnsavedChanges = false;
             statusLabel.setText("Project saved: " + htmlPath.getFileName());
             Alert info = new Alert(Alert.AlertType.INFORMATION, "HTML generated at:\n" + htmlPath, ButtonType.OK);
             info.setHeaderText("Project saved");
             info.initOwner(ownerStage);
             info.showAndWait();
+            return true;
         } catch (IOException ex) {
             LOGGER.log(Level.SEVERE, "Error saving HTML project", ex);
             showError("Cannot save HTML project", ex.getMessage());
+            return false;
         }
+    }
+
+    private void installCloseHandler() {
+        ownerStage.setOnCloseRequest(event -> {
+            if (bypassCloseConfirmation) {
+                bypassCloseConfirmation = false;
+                return;
+            }
+            if (!confirmCloseApplication()) {
+                event.consume();
+            }
+        });
+    }
+
+    private void requestApplicationClose() {
+        if (!confirmCloseApplication()) {
+            return;
+        }
+        bypassCloseConfirmation = true;
+        ownerStage.close();
+    }
+
+    private boolean confirmCloseApplication() {
+        if (!hasUnsavedChanges || currentProject == null) {
+            return true;
+        }
+
+        ButtonType saveButton = new ButtonType("Save", ButtonBar.ButtonData.YES);
+        ButtonType discardButton = new ButtonType("Don't Save", ButtonBar.ButtonData.NO);
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Unsaved changes");
+        alert.setHeaderText("There are unsaved changes");
+        alert.setContentText("Do you want to save the project before closing?");
+        alert.getButtonTypes().setAll(saveButton, discardButton, ButtonType.CANCEL);
+        alert.initOwner(ownerStage);
+
+        Optional<ButtonType> selection = alert.showAndWait();
+        if (selection.isEmpty() || selection.get() == ButtonType.CANCEL) {
+            return false;
+        }
+        if (selection.get() == saveButton) {
+            return saveProjectHtml();
+        }
+        return true;
+    }
+
+    private void markProjectDirty() {
+        if (suppressChangeTracking || currentProject == null) {
+            return;
+        }
+        hasUnsavedChanges = true;
     }
 
     private void exportErpNextFragment() {
@@ -2067,6 +2191,16 @@ public final class MainViewController {
         String escaped = escapeHtml(sourceCode);
         String highlighted = applyBasicSyntaxHighlight(escaped);
         String title = "Block: " + escapeHtml(selectedBlock);
+        String bodyBackground = activeTheme != null && activeTheme.isDark() ? "#151a20" : "#ffffff";
+        String bodyColor = activeTheme != null && activeTheme.isDark() ? "#e7edf5" : "#212529";
+        String headerBackground = activeTheme != null && activeTheme.isDark() ? "#202833" : "#f3f5f7";
+        String headerBorder = activeTheme != null && activeTheme.isDark() ? "#4a5667" : "#dde2e7";
+        String headerColor = activeTheme != null && activeTheme.isDark() ? "#b8c7d9" : "#445061";
+        String tagColor = activeTheme != null && activeTheme.isDark() ? "#8fc1ff" : "#0033b3";
+        String attrColor = activeTheme != null && activeTheme.isDark() ? "#ffcf88" : "#7a3e00";
+        String valueColor = activeTheme != null && activeTheme.isDark() ? "#9fe6a8" : "#067d17";
+        String commentColor = activeTheme != null && activeTheme.isDark() ? "#8b98aa" : "#6f7b8a";
+        String jinjaColor = activeTheme != null && activeTheme.isDark() ? "#d4a6ff" : "#8a2be2";
         return """
                 <!doctype html>
                 <html>
@@ -2078,8 +2212,8 @@ public final class MainViewController {
                     }
                     body {
                       margin: 0;
-                      background: #ffffff;
-                      color: #212529;
+                      background: %s;
+                      color: %s;
                       font-family: Consolas, Menlo, Monaco, monospace;
                     }
                     .header {
@@ -2087,9 +2221,9 @@ public final class MainViewController {
                       top: 0;
                       z-index: 1;
                       padding: 8px 12px;
-                      background: #f3f5f7;
-                      border-bottom: 1px solid #dde2e7;
-                      color: #445061;
+                      background: %s;
+                      border-bottom: 1px solid %s;
+                      color: %s;
                       font-size: 12px;
                       font-weight: 600;
                     }
@@ -2101,11 +2235,11 @@ public final class MainViewController {
                       white-space: pre;
                       overflow: auto;
                     }
-                    .tok-tag { color: #0033b3; }
-                    .tok-attr { color: #7a3e00; }
-                    .tok-val { color: #067d17; }
-                    .tok-comment { color: #6f7b8a; font-style: italic; }
-                    .tok-jinja { color: #8a2be2; font-weight: 600; }
+                    .tok-tag { color: %s; }
+                    .tok-attr { color: %s; }
+                    .tok-val { color: %s; }
+                    .tok-comment { color: %s; font-style: italic; }
+                    .tok-jinja { color: %s; font-weight: 600; }
                   </style>
                 </head>
                 <body>
@@ -2113,7 +2247,44 @@ public final class MainViewController {
                   <pre>%s</pre>
                 </body>
                 </html>
-                """.formatted(title, highlighted);
+                """.formatted(
+                bodyBackground,
+                bodyColor,
+                headerBackground,
+                headerBorder,
+                headerColor,
+                tagColor,
+                attrColor,
+                valueColor,
+                commentColor,
+                jinjaColor,
+                title,
+                highlighted
+        );
+    }
+
+    private void applyTheme(UiTheme theme) {
+        if (theme == null) {
+            return;
+        }
+
+        activeTheme = theme;
+        Application.setUserAgentStylesheet(theme.getUserAgentStylesheet());
+        root.getStyleClass().removeAll(
+                UiTheme.MODENA.getRootStyleClass(),
+                UiTheme.CASPIAN.getRootStyleClass(),
+                UiTheme.METAL.getRootStyleClass(),
+                UiTheme.NIMBUS.getRootStyleClass(),
+                UiTheme.WINDOWS.getRootStyleClass(),
+                UiTheme.WINDOWS_CLASSIC.getRootStyleClass(),
+                UiTheme.MOTIF.getRootStyleClass(),
+                UiTheme.DARK.getRootStyleClass()
+        );
+        root.getStyleClass().add(theme.getRootStyleClass());
+        redrawMeasurementGuides();
+        if (workspaceTabPane.getSelectionModel().getSelectedItem() == htmlSourceTab) {
+            updateHtmlSourceView();
+        }
     }
 
     /**
@@ -2257,6 +2428,7 @@ public final class MainViewController {
         private double dragStartMouseY;
         private double dragStartNodeX;
         private double dragStartNodeY;
+        private boolean moved;
     }
 
     /**

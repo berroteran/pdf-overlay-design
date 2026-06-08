@@ -1,6 +1,278 @@
 .root {
     -fx-font-family: "Segoe UI", "Arial", sans-serif;
     -fx-background-color: #eef2f7;
+
+    -app-bg: #eef2f7;
+    -surface-1: #f7fafc;
+    -surface-2: #eef3f8;
+    -surface-3: #dfe7ef;
+    -surface-4: #f8fbff;
+    -surface-5: #e8eef5;
+    -border-color: #c6d1dc;
+    -border-strong: #8ea1b4;
+    -text-primary: #0f1720;
+    -text-secondary: #2f465a;
+    -button-bg-top: #ffffff;
+    -button-bg-bottom: #d8e2ec;
+    -button-border: #5a7086;
+    -button-text: #0a0d12;
+    -accent-color: #2c6aa0;
+    -accent-strong: #0078d7;
+    -selection-glow: rgba(0, 120, 215, 0.45);
+    -editor-surface: rgba(255, 255, 255, 0.78);
+    -editor-border: #4a5f74;
+    -editor-header-bg: rgba(218, 230, 241, 0.88);
+    -editor-detail-bg: rgba(255, 255, 255, 0.78);
+    -editor-label-bg: rgba(255, 255, 255, 0.22);
+    -editor-text-bg: rgba(255, 255, 255, 0.70);
+    -scroll-track: #d7e0ea;
+    -scroll-thumb: #5d7a99;
+    -scroll-thumb-hover: #436582;
+    -scroll-button: #c8d4e0;
+}
+
+.theme-root {
+    -fx-background-color: -app-bg;
+}
+
+.theme-modena {
+    -app-bg: #eef2f7;
+    -surface-1: #f7fafc;
+    -surface-2: #eef3f8;
+    -surface-3: #dfe7ef;
+    -surface-4: #f8fbff;
+    -surface-5: #e8eef5;
+    -border-color: #c6d1dc;
+    -border-strong: #8ea1b4;
+    -text-primary: #0f1720;
+    -text-secondary: #2f465a;
+    -button-bg-top: #ffffff;
+    -button-bg-bottom: #d8e2ec;
+    -button-border: #5a7086;
+    -button-text: #0a0d12;
+    -accent-color: #2c6aa0;
+    -accent-strong: #0078d7;
+    -selection-glow: rgba(0, 120, 215, 0.45);
+    -editor-surface: rgba(255, 255, 255, 0.78);
+    -editor-border: #4a5f74;
+    -editor-header-bg: rgba(218, 230, 241, 0.88);
+    -editor-detail-bg: rgba(255, 255, 255, 0.78);
+    -editor-label-bg: rgba(255, 255, 255, 0.22);
+    -editor-text-bg: rgba(255, 255, 255, 0.70);
+    -scroll-track: #d7e0ea;
+    -scroll-thumb: #5d7a99;
+    -scroll-thumb-hover: #436582;
+    -scroll-button: #c8d4e0;
+}
+
+.theme-caspian {
+    -app-bg: #e9eef4;
+    -surface-1: #f4f7fb;
+    -surface-2: #e4ebf3;
+    -surface-3: #d8e1eb;
+    -surface-4: #f8fbfe;
+    -surface-5: #e0e8f1;
+    -border-color: #b2c0cf;
+    -border-strong: #7f95ad;
+    -text-primary: #102236;
+    -text-secondary: #29435f;
+    -button-bg-top: #fefefe;
+    -button-bg-bottom: #cdd9e6;
+    -button-border: #4d6a88;
+    -button-text: #122130;
+    -accent-color: #2a5f93;
+    -accent-strong: #3b79bd;
+    -selection-glow: rgba(59, 121, 189, 0.40);
+    -editor-surface: rgba(255, 255, 255, 0.82);
+    -editor-border: #56718c;
+    -editor-header-bg: rgba(208, 221, 234, 0.90);
+    -editor-detail-bg: rgba(255, 255, 255, 0.80);
+    -editor-label-bg: rgba(255, 255, 255, 0.24);
+    -editor-text-bg: rgba(255, 255, 255, 0.72);
+    -scroll-track: #cfdae7;
+    -scroll-thumb: #56789b;
+    -scroll-thumb-hover: #3f6283;
+    -scroll-button: #c0cfde;
+}
+
+.theme-metal {
+    -app-bg: #e7eaef;
+    -surface-1: #f2f4f7;
+    -surface-2: #dce2e8;
+    -surface-3: #ced6df;
+    -surface-4: #f5f7fa;
+    -surface-5: #d8dfe6;
+    -border-color: #a7b1bc;
+    -border-strong: #7f8994;
+    -text-primary: #1f2b37;
+    -text-secondary: #384a5a;
+    -button-bg-top: #fafbfc;
+    -button-bg-bottom: #c4ccd5;
+    -button-border: #697480;
+    -button-text: #1c2731;
+    -accent-color: #536779;
+    -accent-strong: #4a637d;
+    -selection-glow: rgba(83, 103, 121, 0.34);
+    -editor-surface: rgba(248, 250, 252, 0.84);
+    -editor-border: #616d79;
+    -editor-header-bg: rgba(211, 217, 224, 0.92);
+    -editor-detail-bg: rgba(248, 250, 252, 0.80);
+    -editor-label-bg: rgba(255, 255, 255, 0.18);
+    -editor-text-bg: rgba(255, 255, 255, 0.66);
+    -scroll-track: #cfd6de;
+    -scroll-thumb: #6c7884;
+    -scroll-thumb-hover: #56626d;
+    -scroll-button: #c0c8d1;
+}
+
+.theme-nimbus {
+    -app-bg: #e8f0f7;
+    -surface-1: #f1f7fc;
+    -surface-2: #dbe7f2;
+    -surface-3: #cfdeeb;
+    -surface-4: #f5f9fd;
+    -surface-5: #d6e4f0;
+    -border-color: #9eb2c8;
+    -border-strong: #708ba7;
+    -text-primary: #11263a;
+    -text-secondary: #284b6c;
+    -button-bg-top: #fbfdff;
+    -button-bg-bottom: #c6d7e6;
+    -button-border: #5e7d9d;
+    -button-text: #102232;
+    -accent-color: #3471a8;
+    -accent-strong: #3f86c6;
+    -selection-glow: rgba(63, 134, 198, 0.36);
+    -editor-surface: rgba(247, 251, 255, 0.84);
+    -editor-border: #5b7691;
+    -editor-header-bg: rgba(207, 221, 235, 0.92);
+    -editor-detail-bg: rgba(247, 251, 255, 0.82);
+    -editor-label-bg: rgba(255, 255, 255, 0.18);
+    -editor-text-bg: rgba(255, 255, 255, 0.70);
+    -scroll-track: #cfdeeb;
+    -scroll-thumb: #6182a3;
+    -scroll-thumb-hover: #486989;
+    -scroll-button: #c3d5e5;
+}
+
+.theme-windows {
+    -app-bg: #edf1f5;
+    -surface-1: #f6f8fb;
+    -surface-2: #e5ebf2;
+    -surface-3: #d6dfe8;
+    -surface-4: #fbfcfe;
+    -surface-5: #dee6ef;
+    -border-color: #afbcc9;
+    -border-strong: #7c91a6;
+    -text-primary: #11283f;
+    -text-secondary: #294965;
+    -button-bg-top: #fdfefe;
+    -button-bg-bottom: #d0dbe6;
+    -button-border: #66819e;
+    -button-text: #0f2436;
+    -accent-color: #3a6d9a;
+    -accent-strong: #2c78c4;
+    -selection-glow: rgba(44, 120, 196, 0.34);
+    -editor-surface: rgba(250, 252, 254, 0.84);
+    -editor-border: #637a91;
+    -editor-header-bg: rgba(213, 223, 234, 0.92);
+    -editor-detail-bg: rgba(250, 252, 254, 0.82);
+    -editor-label-bg: rgba(255, 255, 255, 0.20);
+    -editor-text-bg: rgba(255, 255, 255, 0.70);
+    -scroll-track: #d4dde7;
+    -scroll-thumb: #6783a0;
+    -scroll-thumb-hover: #4e6b88;
+    -scroll-button: #c7d3df;
+}
+
+.theme-windows-classic {
+    -app-bg: #dfe5eb;
+    -surface-1: #edf2f7;
+    -surface-2: #d1d9e1;
+    -surface-3: #c1ccd7;
+    -surface-4: #f5f8fb;
+    -surface-5: #c9d2dc;
+    -border-color: #8699ab;
+    -border-strong: #5d7184;
+    -text-primary: #102030;
+    -text-secondary: #20394e;
+    -button-bg-top: #f7fafc;
+    -button-bg-bottom: #b9c5d1;
+    -button-border: #4f6478;
+    -button-text: #102030;
+    -accent-color: #2f587f;
+    -accent-strong: #1f6fb9;
+    -selection-glow: rgba(31, 111, 185, 0.34);
+    -editor-surface: rgba(248, 250, 252, 0.86);
+    -editor-border: #56697d;
+    -editor-header-bg: rgba(196, 208, 220, 0.94);
+    -editor-detail-bg: rgba(248, 250, 252, 0.84);
+    -editor-label-bg: rgba(255, 255, 255, 0.16);
+    -editor-text-bg: rgba(255, 255, 255, 0.68);
+    -scroll-track: #c9d3dd;
+    -scroll-thumb: #587086;
+    -scroll-thumb-hover: #41586d;
+    -scroll-button: #bcc9d5;
+}
+
+.theme-motif {
+    -app-bg: #e6e2d3;
+    -surface-1: #f1ecdf;
+    -surface-2: #ddd7c5;
+    -surface-3: #cfc8b3;
+    -surface-4: #f7f3e9;
+    -surface-5: #d6cfbb;
+    -border-color: #aaa28e;
+    -border-strong: #7a715d;
+    -text-primary: #2d2a21;
+    -text-secondary: #494338;
+    -button-bg-top: #f7f2e6;
+    -button-bg-bottom: #c8c0a9;
+    -button-border: #776f5f;
+    -button-text: #29261e;
+    -accent-color: #766d5d;
+    -accent-strong: #8a6f3f;
+    -selection-glow: rgba(138, 111, 63, 0.32);
+    -editor-surface: rgba(247, 243, 233, 0.84);
+    -editor-border: #706754;
+    -editor-header-bg: rgba(214, 206, 188, 0.92);
+    -editor-detail-bg: rgba(247, 243, 233, 0.80);
+    -editor-label-bg: rgba(255, 255, 255, 0.16);
+    -editor-text-bg: rgba(255, 255, 255, 0.58);
+    -scroll-track: #d1cab7;
+    -scroll-thumb: #7b7364;
+    -scroll-thumb-hover: #60594b;
+    -scroll-button: #c3bca8;
+}
+
+.theme-dark {
+    -app-bg: #161c23;
+    -surface-1: #202831;
+    -surface-2: #1b222a;
+    -surface-3: #11171d;
+    -surface-4: #262f39;
+    -surface-5: #1b232c;
+    -border-color: #485565;
+    -border-strong: #6a7b91;
+    -text-primary: #edf3fa;
+    -text-secondary: #c0cfdf;
+    -button-bg-top: #33404d;
+    -button-bg-bottom: #222b35;
+    -button-border: #748aa2;
+    -button-text: #f4f8fc;
+    -accent-color: #4f8cc6;
+    -accent-strong: #7bb4ff;
+    -selection-glow: rgba(123, 180, 255, 0.36);
+    -editor-surface: rgba(33, 42, 52, 0.90);
+    -editor-border: #7b93ab;
+    -editor-header-bg: rgba(68, 84, 101, 0.90);
+    -editor-detail-bg: rgba(29, 37, 46, 0.90);
+    -editor-label-bg: rgba(255, 255, 255, 0.06);
+    -editor-text-bg: rgba(255, 255, 255, 0.10);
+    -scroll-track: #24303b;
+    -scroll-thumb: #89a4c1;
+    -scroll-thumb-hover: #a8c0dc;
+    -scroll-button: #324150;
 }
 
 .splash-root {
@@ -32,14 +304,14 @@
 }
 
 .toolbar {
-    -fx-background-color: linear-gradient(to bottom, #f8fbff, #e8eef5);
-    -fx-border-color: #c6d1dc;
+    -fx-background-color: linear-gradient(to bottom, -surface-4, -surface-5);
+    -fx-border-color: -border-color;
     -fx-border-width: 0 0 1 0;
 }
 
 .menu-bar {
-    -fx-background-color: linear-gradient(to bottom, #fdfefe, #eef3f8);
-    -fx-border-color: #c6d1dc;
+    -fx-background-color: linear-gradient(to bottom, derive(-surface-4, 4%), -surface-2);
+    -fx-border-color: -border-color;
     -fx-border-width: 0 0 1 0;
 }
 
@@ -48,40 +320,84 @@
     -fx-font-weight: 600;
     -fx-padding: 7 12 7 12;
     -fx-min-height: 34px;
+    -fx-background-color: linear-gradient(to bottom, -button-bg-top, -button-bg-bottom);
+    -fx-border-color: -button-border;
+    -fx-border-width: 1;
+    -fx-text-fill: -button-text;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+}
+
+.toolbar-button-large:hover,
+.action-button-medium:hover {
+    -fx-background-color: linear-gradient(to bottom, derive(-button-bg-top, 4%), derive(-button-bg-bottom, 4%));
+}
+
+.toolbar-button-large:armed,
+.toolbar-button-large:selected,
+.action-button-medium:armed {
+    -fx-background-color: linear-gradient(to bottom, derive(-button-bg-bottom, 8%), derive(-button-bg-bottom, -2%));
 }
 
 .action-button-medium {
     -fx-font-size: 13px;
     -fx-padding: 7 12 7 12;
     -fx-min-height: 34px;
+    -fx-background-color: linear-gradient(to bottom, -button-bg-top, -button-bg-bottom);
+    -fx-border-color: -button-border;
+    -fx-border-width: 1;
+    -fx-text-fill: -button-text;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+}
+
+.theme-selector {
+    -fx-min-width: 185px;
 }
 
 .side-panel {
-    -fx-background-color: #f7fafc;
-    -fx-border-color: #c6d1dc;
+    -fx-background-color: -surface-1;
+    -fx-border-color: -border-color;
     -fx-border-width: 0 0 0 1;
 }
 
 .panel-title {
     -fx-font-size: 14px;
     -fx-font-weight: bold;
+    -fx-text-fill: -text-primary;
 }
 
 .status-bar {
-    -fx-background-color: #dfe7ef;
-    -fx-border-color: #c6d1dc;
+    -fx-background-color: -surface-3;
+    -fx-border-color: -border-color;
     -fx-border-width: 1 0 0 0;
 }
 
 .status-meta {
-    -fx-text-fill: #2f465a;
+    -fx-text-fill: -text-secondary;
     -fx-font-size: 12px;
     -fx-font-weight: 600;
 }
 
+.label {
+    -fx-text-fill: -text-primary;
+}
+
+.check-box,
+.radio-button,
+.combo-box,
+.text-field,
+.tab-pane,
+.tab,
+.menu-bar,
+.menu,
+.menu-item {
+    -fx-text-fill: -text-primary;
+}
+
 .ruler-corner {
-    -fx-background-color: linear-gradient(to bottom right, #edf3f9, #dfe8f1);
-    -fx-border-color: #c6d1dc;
+    -fx-background-color: linear-gradient(to bottom right, -surface-4, -surface-3);
+    -fx-border-color: -border-color;
     -fx-border-width: 0 1 1 0;
 }
 
@@ -90,35 +406,35 @@
 }
 
 .overlay-selected {
-    -fx-border-color: #0078d7;
+    -fx-border-color: -accent-strong;
     -fx-border-width: 2;
     -fx-border-style: segments(6, 4);
     -fx-border-insets: -2;
-    -fx-effect: dropshadow(gaussian, rgba(0, 120, 215, 0.45), 10, 0.25, 0, 0);
+    -fx-effect: dropshadow(gaussian, -selection-glow, 10, 0.25, 0, 0);
 }
 
 .editor-text {
-    -fx-background-color: rgba(255, 255, 255, 0.65);
-    -fx-border-color: #4a5f74;
+    -fx-background-color: -editor-text-bg;
+    -fx-border-color: -editor-border;
     -fx-border-width: 1;
-    -fx-text-fill: #0a0d12;
+    -fx-text-fill: -text-primary;
 }
 
 .editor-label {
-    -fx-background-color: rgba(255, 255, 255, 0.2);
+    -fx-background-color: -editor-label-bg;
     -fx-border-color: transparent;
-    -fx-text-fill: #0a0d12;
+    -fx-text-fill: -text-primary;
 }
 
 .editor-button {
-    -fx-background-color: linear-gradient(to bottom, #fefefe, #d8e2ec);
-    -fx-border-color: #4a5f74;
+    -fx-background-color: linear-gradient(to bottom, -button-bg-top, -button-bg-bottom);
+    -fx-border-color: -editor-border;
     -fx-border-width: 1;
-    -fx-text-fill: #0a0d12;
+    -fx-text-fill: -button-text;
 }
 
 .editor-marker {
-    -fx-background-color: #e10000;
+    -fx-background-color: #d52b2b;
     -fx-border-color: #7f0000;
     -fx-border-width: 1;
     -fx-background-radius: 999;
@@ -126,26 +442,114 @@
 }
 
 .editor-table-preview {
-    -fx-background-color: rgba(255, 255, 255, 0.78);
-    -fx-border-color: #4a5f74;
+    -fx-background-color: -editor-surface;
+    -fx-border-color: -editor-border;
     -fx-border-width: 1;
 }
 
 .editor-table-header-cell {
     -fx-font-size: 11px;
     -fx-font-weight: 700;
-    -fx-text-fill: #0a0d12;
+    -fx-text-fill: -text-primary;
     -fx-padding: 2 4 2 4;
-    -fx-background-color: rgba(218, 230, 241, 0.85);
-    -fx-border-color: #4a5f74;
+    -fx-background-color: -editor-header-bg;
+    -fx-border-color: -editor-border;
     -fx-border-width: 0 1 1 0;
 }
 
 .editor-table-detail-cell {
     -fx-font-size: 11px;
-    -fx-text-fill: #455564;
+    -fx-text-fill: -text-secondary;
     -fx-padding: 2 4 2 4;
-    -fx-background-color: rgba(255, 255, 255, 0.76);
-    -fx-border-color: #4a5f74;
+    -fx-background-color: -editor-detail-bg;
+    -fx-border-color: -editor-border;
     -fx-border-width: 0 1 1 0;
+}
+
+.scroll-pane,
+.viewport,
+.tab-pane,
+.split-pane,
+.list-view {
+    -fx-background-color: -surface-1;
+}
+
+.scroll-pane > .viewport {
+    -fx-background-color: -surface-1;
+}
+
+.scroll-pane > .corner {
+    -fx-background-color: -surface-2;
+}
+
+.scroll-bar:horizontal,
+.scroll-bar:vertical {
+    -fx-background-color: -scroll-track;
+    -fx-padding: 2;
+}
+
+.scroll-bar:horizontal .track,
+.scroll-bar:vertical .track {
+    -fx-background-color: -scroll-track;
+    -fx-background-radius: 8;
+}
+
+.scroll-bar:horizontal .thumb,
+.scroll-bar:vertical .thumb {
+    -fx-background-color: -scroll-thumb;
+    -fx-background-radius: 8;
+}
+
+.scroll-bar:horizontal .thumb:hover,
+.scroll-bar:vertical .thumb:hover,
+.scroll-bar:horizontal .thumb:pressed,
+.scroll-bar:vertical .thumb:pressed {
+    -fx-background-color: -scroll-thumb-hover;
+}
+
+.scroll-bar:horizontal .increment-button,
+.scroll-bar:horizontal .decrement-button,
+.scroll-bar:vertical .increment-button,
+.scroll-bar:vertical .decrement-button {
+    -fx-background-color: -scroll-button;
+    -fx-border-color: -border-strong;
+    -fx-border-width: 1;
+    -fx-padding: 2;
+}
+
+.scroll-bar:horizontal .increment-arrow,
+.scroll-bar:horizontal .decrement-arrow,
+.scroll-bar:vertical .increment-arrow,
+.scroll-bar:vertical .decrement-arrow {
+    -fx-background-color: -text-primary;
+}
+
+.combo-box-base,
+.text-field,
+.check-box > .box,
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-background-color: -surface-1;
+}
+
+.combo-box-base,
+.text-field,
+.check-box > .box,
+.tab-pane .tab,
+.menu-bar,
+.context-menu {
+    -fx-border-color: -border-color;
+}
+
+.combo-box-base,
+.text-field {
+    -fx-text-fill: -text-primary;
+    -fx-prompt-text-fill: derive(-text-secondary, 25%);
+}
+
+.tab-pane .tab {
+    -fx-background-color: linear-gradient(to bottom, -surface-4, -surface-2);
+}
+
+.tab-pane .tab:selected {
+    -fx-background-color: linear-gradient(to bottom, derive(-surface-4, 4%), -surface-1);
 }

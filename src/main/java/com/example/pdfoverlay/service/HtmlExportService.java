@@ -144,7 +144,13 @@ public final class HtmlExportService {
         }
 
         StringBuilder html = new StringBuilder();
-        String printStyle = buildPrintStyle(project, exportOptions, ROOT_SELECTOR_BODY, true);
+        String printStyle = buildPrintStyle(
+                project,
+                exportOptions,
+                ROOT_SELECTOR_BODY,
+                true,
+                buildPagePrintCss(project.getMetadata().getPages())
+        );
         StringBuilder bodyContent = new StringBuilder();
         String bodyAttributes = buildBodyAttributes(project);
 
@@ -156,7 +162,7 @@ public final class HtmlExportService {
                 imageDataUri = "data:image/png;base64," + Base64.getEncoder().encodeToString(pngBytes);
             }
             OverlayPage overlayPage = project.getOverlayPage(pageIndex);
-            bodyContent.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground, true));
+            bodyContent.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground));
         }
 
         html.append(renderUsingTemplate(printStyle, bodyContent.toString(), bodyAttributes));
@@ -183,7 +189,7 @@ public final class HtmlExportService {
         }
 
         String rootClass = buildFragmentRootClass(project);
-        String printStyle = buildPrintStyle(project, exportOptions, ROOT_SELECTOR_FRAGMENT, false);
+        String printStyle = buildPrintStyle(project, exportOptions, ROOT_SELECTOR_FRAGMENT, false, "");
         StringBuilder bodyContent = new StringBuilder();
 
         for (PdfPageMetadata pageMetadata : project.getMetadata().getPages()) {
@@ -194,7 +200,7 @@ public final class HtmlExportService {
                 imageDataUri = "data:image/png;base64," + Base64.getEncoder().encodeToString(pngBytes);
             }
             OverlayPage overlayPage = project.getOverlayPage(pageIndex);
-            bodyContent.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground, false));
+            bodyContent.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground));
         }
 
         return """
@@ -226,10 +232,10 @@ public final class HtmlExportService {
     }
 
     private String buildPrintStyle(OverlayProject project, ExportOptions options,
-                                   String rootSelector, boolean includeBodyPageChrome) {
+                                   String rootSelector, boolean includeBodyPageChrome,
+                                   String pagePrintCss) {
         DocumentStatus documentStatus = project.getDocumentStatus();
         boolean statusWatermarkEnabled = project.isStatusWatermarkEnabled();
-        String statusClass = statusWatermarkEnabled ? documentStatus.getBodyClass() : "";
         String statusText = escapeHtml(documentStatus.getWatermarkText());
         String watermarkCss = statusWatermarkEnabled
                 ? """
@@ -252,7 +258,7 @@ public final class HtmlExportService {
                         %s.status-voided::before { content: "ANULADO"; }
                     """.formatted(rootSelector, rootSelector, rootSelector, statusText, rootSelector)
                 : "";
-        String fontFamily = options.exportFont() ? "font-family: \"Segoe UI\", Tahoma, sans-serif;" : "";
+        String fontFamily = options.exportFont() ? "font-family: \"Courier New\", Courier, monospace;" : "";
         String fontSize10 = options.exportFont() ? "font-size: 10pt;" : "";
         String fontSize9 = options.exportFont() ? "font-size: 9pt;" : "";
         String textFieldBorder = options.exportTextBorders() ? "border: 1px solid #4b5f73;" : "border: none;";
@@ -276,7 +282,7 @@ public final class HtmlExportService {
                 : """
                         %s {
                             position: relative;
-                            width: 100%%;
+                            width: fit-content;
                             %s
                         }
                     """.formatted(rootSelector, fontFamily);
@@ -298,70 +304,55 @@ public final class HtmlExportService {
                 * { box-sizing: border-box; }
                 %s
                 %s
+                %s
                 %s {
+                    position: relative;
                     min-height: 100vh;
                 }
-                %s table.print-page {
+                %s .preprinted-sheet {
                     position: relative;
                     page-break-after: always;
                     break-after: page;
-                    margin: 0 auto 12px;
+                    margin: 0 0 12px 0;
                     padding: 0;
-                    border: 1px solid #d1d7df;
-                    border-collapse: collapse;
-                    border-spacing: 0;
-                    table-layout: fixed;
+                    border: none;
                     background-repeat: no-repeat;
                     background-size: 100%% 100%%;
-                    background-position: center center;
+                    background-position: top left;
                     overflow: hidden;
                 }
-                %s table.print-page > tbody > tr > td {
-                    padding: 0;
-                    margin: 0;
-                    border: none;
-                }
-                %s .overlay-canvas {
-                    width: 100%%;
-                    height: 100%%;
-                }
-                %s table.overlay-item {
+                %s .overlay-item {
                     position: absolute;
-                    border-collapse: collapse;
-                    border-spacing: 0;
-                    transform-origin: top left;
-                }
-                %s table.overlay-item > tbody > tr > td {
                     margin: 0;
-                    padding: 1px 2px;
-                    vertical-align: top;
-                    line-height: 1.15;
+                    padding: 0;
+                    line-height: 1;
+                    white-space: pre-wrap;
                 }
-                %s table.overlay-text > tbody > tr > td {
+                %s .overlay-text {
                     %s
-                    background: rgba(255, 255, 255, 0.15);
+                    background: transparent;
                     color: #0a0d11;
                     %s
                 }
-                %s table.overlay-label > tbody > tr > td {
+                %s .overlay-label {
                     color: #0a0d11;
                     %s
                     white-space: nowrap;
                 }
-                %s table.overlay-button > tbody > tr > td {
+                %s .overlay-button {
                     border: 1px solid #3d4d5d;
                     background: #e7edf4;
                     color: #0a0d11;
                     %s
                     text-align: center;
                 }
-                %s table.overlay-marker > tbody > tr > td {
-                    padding: 0;
+                %s .overlay-marker {
                     border-radius: 999px;
                     border: 1px solid #8d0000;
                     background: #e00000;
                 }
                 %s table.overlay-table {
+                    position: absolute;
                     table-layout: fixed;
                     border-collapse: collapse;
                     border-spacing: 0;
@@ -377,6 +368,7 @@ public final class HtmlExportService {
                     %s
                     font-weight: 700;
                     padding: 2px 4px;
+                    line-height: 1;
                     text-align: left;
                     vertical-align: top;
                 }
@@ -386,11 +378,12 @@ public final class HtmlExportService {
                     color: #0a0d11;
                     %s
                     padding: 2px 4px;
+                    line-height: 1;
                     vertical-align: top;
                 }
                 @media print {
                     %s
-                    %s table.print-page {
+                    %s .preprinted-sheet {
                         margin: 0;
                         border: none;
                     }
@@ -398,9 +391,7 @@ public final class HtmlExportService {
                 """.formatted(
                 rootChrome,
                 watermarkCss,
-                rootSelector,
-                rootSelector,
-                rootSelector,
+                pagePrintCss,
                 rootSelector,
                 rootSelector,
                 rootSelector,
@@ -410,6 +401,7 @@ public final class HtmlExportService {
                 rootSelector,
                 fontSize10,
                 rootSelector,
+                fontSize9,
                 rootSelector,
                 fontSize9,
                 rootSelector,
@@ -428,93 +420,70 @@ public final class HtmlExportService {
     }
 
     private String buildPageMarkup(PdfPageMetadata pageMetadata, OverlayPage overlayPage,
-                                   String imageDataUri, boolean includePdfBackground,
-                                   boolean includePagePrintStyle) {
-        String widthInches = formatDouble(pageMetadata.widthInches());
-        String heightInches = formatDouble(pageMetadata.heightInches());
-
+                                   String imageDataUri, boolean includePdfBackground) {
+        String widthMillimeters = formatDouble(pageMetadata.widthMillimeters());
+        String heightMillimeters = formatDouble(pageMetadata.heightMillimeters());
         String pageClass = "page-" + (pageMetadata.pageIndex() + 1);
         StringBuilder builder = new StringBuilder();
-        if (includePagePrintStyle) {
-            builder.append("""
-                    <style media="print">
-                        @page %s {
-                            size: %sin %sin;
-                            margin: 0;
-                        }
-                        .%s {
-                            page: %s;
-                        }
-                    </style>
-                    """.formatted(pageClass, widthInches, heightInches, pageClass, pageClass));
-        }
 
         builder.append("""
-                <table class="print-page %s" style="%s">
-                    <tbody>
-                        <tr>
-                            <td class="overlay-canvas">
+                <div class="preprinted-sheet %s" style="%s">
                 """.formatted(pageClass, """
-                width:%sin;
-                height:%sin;
+                width:%smm;
+                height:%smm;
                 %s
                 """.formatted(
-                widthInches,
-                heightInches,
+                widthMillimeters,
+                heightMillimeters,
                 includePdfBackground ? "background-image:url('" + escapeHtml(imageDataUri) + "');" : "background-image:none;"
         ).replace("\n", "")));
 
         for (OverlayElement element : overlayPage.mutableElements()) {
-            builder.append(buildElementMarkup(element));
+            builder.append(buildElementMarkup(element, pageMetadata));
         }
         builder.append("""
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                </div>
                 """);
         return builder.toString();
     }
 
-    private String buildElementMarkup(OverlayElement element) {
-        String left = percent(element.getXRatio());
-        String top = percent(element.getYRatio());
-        String width = percent(element.getWidthRatio());
-        String height = percent(element.getHeightRatio());
+    private String buildElementMarkup(OverlayElement element, PdfPageMetadata pageMetadata) {
+        String left = millimeters(element.getXRatio(), pageMetadata.widthMillimeters());
+        String top = millimeters(element.getYRatio(), pageMetadata.heightMillimeters());
+        String width = millimeters(element.getWidthRatio(), pageMetadata.widthMillimeters());
+        String height = millimeters(element.getHeightRatio(), pageMetadata.heightMillimeters());
         String text = escapeHtml(element.getText());
         String elementId = escapeHtml(element.getId());
 
-        String commonStyle = "left:%s;top:%s;width:%s;height:%s;".formatted(left, top, width, height);
+        String commonStyle = "left:%smm;top:%smm;width:%smm;height:%smm;".formatted(left, top, width, height);
 
         return switch (element.getType()) {
             case TEXT_FIELD -> """
-                    <table id="%s" class="overlay-item overlay-text" style="%s">
-                        <tbody><tr><td>%s</td></tr></tbody>
-                    </table>
+                    <div id="%s" class="overlay-item overlay-text" style="%s">%s</div>
                     """.formatted(elementId, commonStyle, text);
             case LABEL -> """
-                    <table id="%s" class="overlay-item overlay-label" style="%s">
-                        <tbody><tr><td>%s</td></tr></tbody>
-                    </table>
+                    <div id="%s" class="overlay-item overlay-label" style="%s">%s</div>
                     """.formatted(elementId, commonStyle, text);
             case BUTTON -> """
-                    <table id="%s" class="overlay-item overlay-button" style="%s">
-                        <tbody><tr><td>%s</td></tr></tbody>
-                    </table>
+                    <div id="%s" class="overlay-item overlay-button" style="%s">%s</div>
                     """.formatted(elementId, commonStyle, text.isBlank() ? "Button" : text);
             case MARKER -> """
-                    <table id="%s" class="overlay-item overlay-marker" style="%s">
-                        <tbody><tr><td></td></tr></tbody>
-                    </table>
+                    <div id="%s" class="overlay-item overlay-marker" style="%s"></div>
                     """.formatted(elementId, commonStyle);
-            case TABLE -> buildTableElementMarkup(element, commonStyle, elementId);
+            case TABLE -> buildTableElementMarkup(element, commonStyle, elementId, pageMetadata.widthMillimeters());
         };
     }
 
-    private String buildTableElementMarkup(OverlayElement element, String commonStyle, String elementId) {
+    private String buildTableElementMarkup(OverlayElement element, String commonStyle,
+                                           String elementId, double pageWidthMillimeters) {
         int columnCount = Math.max(1, element.getTableColumnCount());
         int detailRows = element.getTableDataRows();
-        List<Double> columnWidths = parseTableColumnWidths(element.getTableColumnWidths(), columnCount);
+        double tableWidthMillimeters = Math.max(1.0d, element.getWidthRatio() * pageWidthMillimeters);
+        List<Double> columnWidths = parseTableColumnWidths(
+                element.getTableColumnWidths(),
+                columnCount,
+                tableWidthMillimeters
+        );
         List<String> headers = parseTableHeaders(element.getText(), columnCount);
 
         StringBuilder builder = new StringBuilder();
@@ -755,7 +724,26 @@ public final class HtmlExportService {
         return project;
     }
 
-    private List<Double> parseTableColumnWidths(String rawWidths, int columnCount) {
+    private String buildPagePrintCss(List<PdfPageMetadata> pagesMetadata) {
+        if (pagesMetadata.isEmpty()) {
+            return "";
+        }
+
+        PdfPageMetadata firstPage = pagesMetadata.getFirst();
+        return """
+                @media print {
+                    @page {
+                        size: %smm %smm;
+                        margin: 0;
+                    }
+                }
+                """.formatted(
+                formatDouble(firstPage.widthMillimeters()),
+                formatDouble(firstPage.heightMillimeters())
+        );
+    }
+
+    private List<Double> parseTableColumnWidths(String rawWidths, int columnCount, double tableWidthMillimeters) {
         String source = rawWidths == null ? "" : rawWidths.strip();
         if (source.isBlank()) {
             source = buildDefaultColumnWidths(columnCount);
@@ -783,7 +771,7 @@ public final class HtmlExportService {
 
         List<Double> normalized = new ArrayList<>();
         for (double value : values) {
-            normalized.add((value / total) * 100.0d);
+            normalized.add((value / total) * tableWidthMillimeters);
         }
         return normalized;
     }
@@ -823,9 +811,9 @@ public final class HtmlExportService {
         return String.join(",", widths);
     }
 
-    private String percent(double ratio) {
+    private String millimeters(double ratio, double totalMillimeters) {
         double safeRatio = Math.max(0.0d, Math.min(1.0d, ratio));
-        return formatDouble(safeRatio * 100.0d) + "%";
+        return formatDouble(safeRatio * totalMillimeters);
     }
 
     private String formatDouble(double value) {

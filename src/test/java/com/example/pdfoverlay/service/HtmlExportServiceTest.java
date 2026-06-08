@@ -42,6 +42,7 @@ class HtmlExportServiceTest {
         assertTrue(htmlContent.contains("DOC_STATUS=VOIDED"));
         assertTrue(htmlContent.contains("body.status-voided::before"));
         assertTrue(htmlContent.contains("<body class=\"status-voided\">"));
+        assertTrue(htmlContent.contains("width:215.9mm"));
 
         Path tempFile = Files.createTempFile("overlay-status-", ".html");
         Files.writeString(tempFile, htmlContent);
@@ -70,6 +71,7 @@ class HtmlExportServiceTest {
         assertFalse(htmlContent.contains("DOC_STATUS=VOIDED"));
         assertFalse(htmlContent.contains("status-draft::before"));
         assertTrue(htmlContent.contains("<div class=\"print-format-gutter\">"));
+        assertTrue(htmlContent.contains("@page"));
     }
 
     /**
@@ -87,9 +89,12 @@ class HtmlExportServiceTest {
         String fragment = service.buildEmbedHtmlFragment(project, 300, false, ExportOptions.defaultOptions());
 
         assertTrue(fragment.contains("<style>"));
-        assertTrue(fragment.contains(".preprinted-page table.print-page"));
+        assertTrue(fragment.contains(".preprinted-page .preprinted-sheet"));
         assertTrue(fragment.contains("Customer"));
         assertTrue(fragment.contains("<div class=\"preprinted-page\">"));
+        assertTrue(fragment.contains("left:21.59mm"));
+        assertTrue(fragment.contains("width:43.18mm"));
+        assertTrue(fragment.contains("<div id=\""));
         assertFalse(fragment.contains("{{ include_style('print.bundle.css') }}"));
         assertFalse(fragment.contains("PDF_OVERLAY_METADATA_BEGIN"));
         assertFalse(fragment.contains("<html>"));

@@ -10,7 +10,7 @@ Resolver el diseño e impresión de formatos preimpresos con precisión:
 
 1. Cargar PDF base (una o múltiples páginas).
 2. Diseñar capa overlay visual.
-3. Exportar HTML imprimible conservando posiciones relativas.
+3. Exportar HTML imprimible sobre un lienzo físico fijo.
 4. Reutilizar el HTML en plantillas ERPNext/Frappe.
 
 ---
@@ -85,7 +85,43 @@ Resolver el diseño e impresión de formatos preimpresos con precisión:
 
 ---
 
-## Tablas en overlay (sin DIV)
+## Reglas para preimpresos
+
+Formato recomendado y aplicado en la exportación:
+
+- una sola unidad física para posicionamiento: `mm`
+- un lienzo físico fijo por página
+- `position: absolute` para campos sueltos
+- `line-height: 1` para texto exportado
+- una sola fuente de CSS por salida
+- sin `%` para `top`, `left`, `width` ni `height` de campos sueltos
+- sin `padding`, `margin` ni `border` en el lienzo principal
+
+Verificación del generador:
+
+- `TEXT_FIELD`, `LABEL`, `BUTTON` y `MARKER` se exportan como `div`
+- `TABLE` se mantiene como tabla HTML real
+- el lienzo por página se exporta en `mm`
+- el fragmento ERPNext empieza con:
+
+```html
+<style>
+...
+</style>
+<div class="preprinted-page">
+...
+</div>
+```
+
+Recomendación operativa de impresión:
+
+- `Scale 100%`
+- no usar `Fit to page`
+- usar `transform` solo para calibración temporal
+
+---
+
+## Tablas en overlay
 
 La tabla de overlay se exporta usando solo etiquetas de tabla HTML:
 
@@ -102,7 +138,7 @@ Configuración disponible:
 - filas de detalle (`1` o `4`)
 - encabezados.
 
-**Restricción de diseño aplicada:** no se usa `<div>` para representar la tabla overlay exportada.
+**Restricción de diseño aplicada:** solo el elemento de tabla se exporta como tabla HTML real.
 
 ---
 
@@ -132,8 +168,9 @@ Al reabrir HTML, la app restaura ese estado y su activación.
 La salida está pensada para reportes HTML + Jinja:
 
 - plantilla base obligatoria tipo ERPNext Print Format
-- layout de página con `table.print-page`
-- overlay estructurado con tablas
+- layout de página con lienzo físico fijo en `mm`
+- overlay con posicionamiento absoluto para campos sueltos
+- tabla HTML real solo para grids/tablas de detalle
 - soporte natural para bloques Jinja (`{{ }}` / `{% %}`) en flujos posteriores.
 
 Template base obligatoria actual:
@@ -222,7 +259,7 @@ src/main/java/com/example/pdfoverlay
 2. Insertar y posicionar controles en `Graphic Mode`.
 3. Ajustar propiedades en panel derecho (ID, texto, tabla, estado).
 4. Revisar `HTML Source` para validar salida.
-5. `Save HTML As...` y elegir opciones de exportación.
+5. `Save Project As...` o `Export ERPNext...` según el destino.
 6. Reabrir luego con `Open HTML` para continuar edición.
 7. Imprimir con `Print HTML` o `Print PDF`.
 
@@ -289,7 +326,8 @@ Para evitar error de runtime JavaFX faltante:
 - Template obligatoria ERPNext almacenada en `src/main/resources/templates/erpnext/print-format.html`.
 - Metadata embebida para re-edición (`PDF_OVERLAY_METADATA_BEGIN/END`).
 - Opción de guardar con o sin fondo PDF embebido.
-- `table.print-page` exporta `padding: 0`.
+- posicionamiento físico exportado en `mm`.
+- fragmento ERPNext envuelto en `<div class="preprinted-page">`.
 
 ---
 

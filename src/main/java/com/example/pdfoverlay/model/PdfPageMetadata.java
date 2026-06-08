@@ -26,5 +26,22 @@ public record PdfPageMetadata(int pageIndex, float widthPoints, float heightPoin
     public double heightInches() {
         return heightPoints / 72.0d;
     }
-}
 
+    /**
+     * Obtiene el ancho físico de la página en milímetros.
+     *
+     * @return ancho en milímetros.
+     */
+    public double widthMillimeters() {
+        return widthInches() * 25.4d;
+    }
+
+    /**
+     * Obtiene el alto físico de la página en milímetros.
+     *
+     * @return alto en milímetros.
+     */
+    public double heightMillimeters() {
+        return heightInches() * 25.4d;
+    }
+}

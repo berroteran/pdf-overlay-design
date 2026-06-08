@@ -256,6 +256,28 @@ public final class ButtonIconFactory {
     }
 
     /**
+     * @return ícono de herramienta de medición.
+     */
+    public static Node measureToolIcon() {
+        Polygon ruler = new Polygon(
+                2.0, 10.8,
+                10.8, 2.0,
+                12.0, 3.2,
+                3.2, 12.0
+        );
+        ruler.setFill(Color.web("#f5e4a6"));
+        ruler.setStroke(STROKE);
+        ruler.setStrokeWidth(1.0);
+
+        Line tick1 = createLine(4.2, 9.8, 5.0, 10.6, STROKE, 0.8);
+        Line tick2 = createLine(5.8, 8.2, 6.8, 9.2, STROKE, 0.8);
+        Line tick3 = createLine(7.4, 6.6, 8.2, 7.4, STROKE, 0.8);
+        Line tick4 = createLine(9.0, 5.0, 10.0, 6.0, STROKE, 0.8);
+
+        return wrap(new Group(ruler, tick1, tick2, tick3, tick4));
+    }
+
+    /**
      * @return ícono para aplicar cambios de texto.
      */
     public static Node applyTextIcon() {

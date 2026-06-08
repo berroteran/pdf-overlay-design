@@ -17,6 +17,7 @@ import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
+import javafx.geometry.Point2D;
 import javafx.scene.Cursor;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -168,6 +169,9 @@ public final class MainViewController {
     private final Button previousPageButton;
     private final Button nextPageButton;
     private final Button deleteSelectedButton;
+    private final Label measurementValueLabel;
+    private final Region measurementRectangle;
+    private final Label measurementOverlayLabel;
 
     private final Map<String, Region> elementNodes;
     private final Map<ResizeHandlePosition, Region> resizeHandles;
@@ -180,6 +184,7 @@ public final class MainViewController {
     private OverlayElement selectedElement;
     private Region selectedNode;
     private ResizeState activeResizeState;
+    private MeasurementState activeMeasurementState;
     private boolean autoFitZoomOnNextLoad;
     private int autoFitPendingAttempts;
     private String latestGeneratedHtmlSource;
@@ -245,6 +250,9 @@ public final class MainViewController {
         this.previousPageButton = new Button("< Prev");
         this.nextPageButton = new Button("Next >");
         this.deleteSelectedButton = new Button("Delete selected");
+        this.measurementValueLabel = new Label("W x H: -");
+        this.measurementRectangle = new Region();
+        this.measurementOverlayLabel = new Label();
 
         this.elementNodes = new HashMap<>();
         this.resizeHandles = new EnumMap<>(ResizeHandlePosition.class);
@@ -267,6 +275,7 @@ public final class MainViewController {
 
         configureCanvas();
         configureResizeHandles();
+        configureMeasurementOverlay();
         configureActions();
         configureThemeSelector();
         zoomValueLabel.setText(formatZoomPercentage(zoomSlider.getValue()));
@@ -301,6 +310,10 @@ public final class MainViewController {
 
         overlayPane.setManaged(true);
         overlayPane.setPickOnBounds(true);
+        overlayPane.addEventFilter(MouseEvent.MOUSE_PRESSED, this::handleMeasurementMousePressed);
+        overlayPane.addEventFilter(MouseEvent.MOUSE_DRAGGED, this::handleMeasurementMouseDragged);
+        overlayPane.addEventFilter(MouseEvent.MOUSE_RELEASED, this::handleMeasurementMouseReleased);
+        overlayPane.addEventFilter(MouseEvent.MOUSE_CLICKED, this::handleMeasurementMouseClicked);
         overlayPane.setOnMouseClicked(this::handleCanvasClick);
 
         pageStack.getChildren().addAll(pageImageView, gridCanvas, overlayPane);
@@ -351,6 +364,43 @@ public final class MainViewController {
             handle.setOnMouseReleased(event -> handleResizeReleased(event));
             resizeHandles.put(position, handle);
         }
+    }
+
+    private void configureMeasurementOverlay() {
+        measurementRectangle.getStyleClass().add("measurement-rectangle");
+        measurementRectangle.setManaged(false);
+        measurementRectangle.setMouseTransparent(true);
+        measurementRectangle.setVisible(false);
+
+        measurementOverlayLabel.getStyleClass().add("measurement-overlay-label");
+        measurementOverlayLabel.setManaged(false);
+        measurementOverlayLabel.setMouseTransparent(true);
+        measurementOverlayLabel.setVisible(false);
+    }
+
+    private void installMeasurementOverlay() {
+        if (!overlayPane.getChildren().contains(measurementRectangle)) {
+            overlayPane.getChildren().add(measurementRectangle);
+        }
+        if (!overlayPane.getChildren().contains(measurementOverlayLabel)) {
+            overlayPane.getChildren().add(measurementOverlayLabel);
+        }
+        hideMeasurementOverlay();
+    }
+
+    private void bringMeasurementOverlayToFront() {
+        measurementRectangle.toFront();
+        measurementOverlayLabel.toFront();
+    }
+
+    private boolean isMeasurementOverlayVisible() {
+        return measurementRectangle.isVisible() || measurementOverlayLabel.isVisible();
+    }
+
+    private void hideMeasurementOverlay() {
+        measurementRectangle.setVisible(false);
+        measurementOverlayLabel.setVisible(false);
+        activeMeasurementState = null;
     }
 
     private void installResizeHandles() {
@@ -420,7 +470,17 @@ public final class MainViewController {
     }
 
     private void configureActions() {
+        root.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
+            if (activeMeasurementState == null && isMeasurementOverlayVisible()) {
+                hideMeasurementOverlay();
+            }
+        });
         root.addEventHandler(javafx.scene.input.KeyEvent.KEY_PRESSED, event -> {
+            if (isMeasurementOverlayVisible()) {
+                hideMeasurementOverlay();
+                event.consume();
+                return;
+            }
             if (event.getCode() == KeyCode.DELETE) {
                 removeSelectedElement();
                 event.consume();
@@ -536,7 +596,13 @@ public final class MainViewController {
             Object userData = newToggle.getUserData();
             if (userData instanceof EditorTool tool) {
                 activeTool = tool;
-                statusLabel.setText("Active tool: " + activeTool.name());
+                if (activeTool == EditorTool.MEASURE) {
+                    clearSelection();
+                    statusLabel.setText("Drag on the overlay to measure W x H in millimeters");
+                } else {
+                    hideMeasurementOverlay();
+                    statusLabel.setText("Active tool: " + activeTool.name());
+                }
             }
         });
 
@@ -702,6 +768,9 @@ public final class MainViewController {
         ToggleButton buttonToolButton = createToolButton("Button", EditorTool.BUTTON, false, ButtonIconFactory.buttonToolIcon());
         ToggleButton markerToolButton = createToolButton("Point", EditorTool.MARKER, false, ButtonIconFactory.markerToolIcon());
         ToggleButton tableToolButton = createToolButton("Table", EditorTool.TABLE, false, ButtonIconFactory.tableToolIcon());
+        ToggleButton measureToolButton = createToolButton("Measure", EditorTool.MEASURE, false, ButtonIconFactory.measureToolIcon());
+        applyButtonTooltip(measureToolButton, "Measure a temporary width and height in millimeters");
+        measurementValueLabel.getStyleClass().add("measurement-readout");
         Label themeLabel = new Label("Theme");
         themeLabel.getStyleClass().add("status-meta");
         Region spacer = new Region();
@@ -720,6 +789,8 @@ public final class MainViewController {
                 buttonToolButton,
                 markerToolButton,
                 tableToolButton,
+                measureToolButton,
+                measurementValueLabel,
                 spacer,
                 themeLabel,
                 themeSelector
@@ -1001,7 +1072,9 @@ public final class MainViewController {
         overlayPane.getChildren().clear();
         elementNodes.clear();
         clearSelection();
+        hideMeasurementOverlay();
         installResizeHandles();
+        installMeasurementOverlay();
 
         if (currentProject == null) {
             return;
@@ -1014,6 +1087,7 @@ public final class MainViewController {
             overlayPane.getChildren().add(node);
         }
         bringResizeHandlesToFront();
+        bringMeasurementOverlayToFront();
     }
 
     private void redrawMeasurementGuides() {
@@ -1175,6 +1249,10 @@ public final class MainViewController {
             return 0.0d;
         }
         return currentPagePixelHeight / (pageMetadata.heightInches() * 2.54d);
+    }
+
+    private double getPixelsPerMillimeterY() {
+        return getPixelsPerCentimeterY() / 10.0d;
     }
 
     private PdfPageMetadata getCurrentPageMetadata() {
@@ -1535,9 +1613,122 @@ public final class MainViewController {
         tableGrid.requestLayout();
     }
 
+    private void handleMeasurementMousePressed(MouseEvent event) {
+        if (activeTool != EditorTool.MEASURE) {
+            return;
+        }
+        if (currentProject == null) {
+            statusLabel.setText("Open a PDF first");
+            event.consume();
+            return;
+        }
+
+        Point2D point = getClampedOverlayPoint(event);
+        activeMeasurementState = new MeasurementState(point.getX(), point.getY());
+        clearSelection();
+        measurementRectangle.setVisible(true);
+        measurementOverlayLabel.setVisible(true);
+        updateMeasurementOverlay(point);
+        bringMeasurementOverlayToFront();
+        statusLabel.setText("Measuring W x H in millimeters");
+        event.consume();
+    }
+
+    private void handleMeasurementMouseDragged(MouseEvent event) {
+        if (activeTool != EditorTool.MEASURE || activeMeasurementState == null) {
+            return;
+        }
+        updateMeasurementOverlay(getClampedOverlayPoint(event));
+        event.consume();
+    }
+
+    private void handleMeasurementMouseReleased(MouseEvent event) {
+        if (activeTool != EditorTool.MEASURE || activeMeasurementState == null) {
+            return;
+        }
+        Point2D point = getClampedOverlayPoint(event);
+        updateMeasurementOverlay(point);
+        double measuredWidth = Math.abs(point.getX() - activeMeasurementState.startX());
+        double measuredHeight = Math.abs(point.getY() - activeMeasurementState.startY());
+        activeMeasurementState = null;
+        if (measuredWidth < 1.0d && measuredHeight < 1.0d) {
+            hideMeasurementOverlay();
+            statusLabel.setText("Measurement cancelled");
+        } else {
+            statusLabel.setText("Measurement captured: " + measurementValueLabel.getText());
+        }
+        event.consume();
+    }
+
+    private void handleMeasurementMouseClicked(MouseEvent event) {
+        if (activeTool == EditorTool.MEASURE) {
+            event.consume();
+        }
+    }
+
+    private Point2D getClampedOverlayPoint(MouseEvent event) {
+        Point2D localPoint = overlayPane.sceneToLocal(event.getSceneX(), event.getSceneY());
+        return new Point2D(
+                clamp(localPoint.getX(), 0.0d, currentPagePixelWidth),
+                clamp(localPoint.getY(), 0.0d, currentPagePixelHeight)
+        );
+    }
+
+    private void updateMeasurementOverlay(Point2D currentPoint) {
+        if (activeMeasurementState == null) {
+            return;
+        }
+
+        double startX = activeMeasurementState.startX();
+        double startY = activeMeasurementState.startY();
+        double x = Math.min(startX, currentPoint.getX());
+        double y = Math.min(startY, currentPoint.getY());
+        double width = Math.abs(currentPoint.getX() - startX);
+        double height = Math.abs(currentPoint.getY() - startY);
+
+        measurementRectangle.resizeRelocate(x, y, Math.max(1.0d, width), Math.max(1.0d, height));
+        measurementRectangle.setVisible(true);
+
+        String measurementText = formatMeasurementDimensions(width, height);
+        measurementValueLabel.setText(measurementText);
+        measurementOverlayLabel.setText(measurementText);
+        measurementOverlayLabel.autosize();
+        positionMeasurementOverlayLabel(x, y, width, height);
+        measurementOverlayLabel.setVisible(true);
+    }
+
+    private void positionMeasurementOverlayLabel(double x, double y, double width, double height) {
+        double labelWidth = Math.max(110.0d, measurementOverlayLabel.prefWidth(-1));
+        double labelHeight = Math.max(20.0d, measurementOverlayLabel.prefHeight(-1));
+        double labelX = x + width + 6.0d;
+        if (labelX + labelWidth > currentPagePixelWidth) {
+            labelX = Math.max(0.0d, x - labelWidth - 6.0d);
+        }
+        double labelY = y + height + 6.0d;
+        if (labelY + labelHeight > currentPagePixelHeight) {
+            labelY = Math.max(0.0d, y - labelHeight - 6.0d);
+        }
+        measurementOverlayLabel.resizeRelocate(labelX, labelY, labelWidth, labelHeight);
+    }
+
+    private String formatMeasurementDimensions(double widthPixels, double heightPixels) {
+        double pixelsPerMillimeterX = getPixelsPerMillimeterX();
+        double pixelsPerMillimeterY = getPixelsPerMillimeterY();
+        if (pixelsPerMillimeterX <= 0.0d || pixelsPerMillimeterY <= 0.0d) {
+            return "W x H: -";
+        }
+
+        double widthMillimeters = widthPixels / pixelsPerMillimeterX;
+        double heightMillimeters = heightPixels / pixelsPerMillimeterY;
+        return "W x H: " + formatWidth(widthMillimeters) + " x " + formatWidth(heightMillimeters) + " mm";
+    }
+
     private void handleCanvasClick(MouseEvent event) {
         if (currentProject == null) {
             statusLabel.setText("Open a PDF first");
+            return;
+        }
+        if (activeTool == EditorTool.MEASURE) {
             return;
         }
         if (activeTool == EditorTool.SELECT) {
@@ -2887,6 +3078,9 @@ public final class MainViewController {
     }
 
     private record ResizeBounds(double x, double y, double width, double height) {
+    }
+
+    private record MeasurementState(double startX, double startY) {
     }
 
     private enum ResizeAnchor {

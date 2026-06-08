@@ -9,5 +9,6 @@ public enum EditorTool {
     LABEL,
     BUTTON,
     MARKER,
-    TABLE
+    TABLE,
+    MEASURE
 }

@@ -88,6 +88,9 @@ class HtmlExportServiceTest {
         assertTrue(fragment.contains("left:21.59mm"));
         assertTrue(fragment.contains("width:43.18mm"));
         assertTrue(fragment.contains("<div id=\""));
+        assertFalse(fragment.contains(".overlay-button"));
+        assertFalse(fragment.contains(".overlay-marker"));
+        assertFalse(fragment.contains("color: #0a0d11;"));
         assertFalse(fragment.contains("{{ include_style('print.bundle.css') }}"));
         assertFalse(fragment.contains("PDF_OVERLAY_METADATA_BEGIN"));
         assertFalse(fragment.contains("<html>"));
@@ -122,6 +125,8 @@ class HtmlExportServiceTest {
         assertTrue(fragment.contains("<col style=\"width:40mm;\">"));
         assertTrue(fragment.contains("<col style=\"width:37.95mm;\">"));
         assertFalse(fragment.contains("<col style=\"width:30%;\">"));
+        assertFalse(fragment.contains("background: rgba("));
+        assertFalse(fragment.contains("color: #0a0d11;"));
     }
 
     /**

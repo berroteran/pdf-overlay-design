@@ -18,10 +18,9 @@ public record ExportOptions(
     /**
      * Opciones recomendadas por defecto.
      *
-     * @return configuración con todas las opciones activas.
+     * @return configuración minimalista para impresión limpia.
      */
     public static ExportOptions defaultOptions() {
-        return new ExportOptions(true, true, true, true);
+        return new ExportOptions(true, false, false, false);
     }
 }
-

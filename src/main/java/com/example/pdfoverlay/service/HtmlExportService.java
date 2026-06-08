@@ -16,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -287,15 +288,16 @@ public final class HtmlExportService {
         String fontFamily = options.exportFont() ? "font-family: \"Courier New\", Courier, monospace;" : "";
         String fontSize10 = options.exportFont() ? "font-size: 10pt;" : "";
         String fontSize9 = options.exportFont() ? "font-size: 9pt;" : "";
-        String textFieldBorder = options.exportTextBorders() ? "border: 1px solid #4b5f73;" : "border: none;";
-        String tableHeaderBorder = options.exportTableBorders() ? "border: 1px solid #3f5162;" : "border: none;";
-        String tableCellBorder = options.exportTableBorders() ? "border: 1px solid #4f6273;" : "border: none;";
+        String textFieldBorder = options.exportTextBorders() ? "border: 1px solid #4b5f73;" : "";
+        String tableHeaderBorder = options.exportTableBorders() ? "border: 1px solid #3f5162;" : "";
+        String tableCellBorder = options.exportTableBorders() ? "border: 1px solid #4f6273;" : "";
         String tableHeaderBackground = options.exportTableColors()
                 ? "background: rgba(225, 235, 245, 0.85);"
-                : "background: transparent;";
+                : "";
         String tableCellBackground = options.exportTableColors()
                 ? "background: rgba(255, 255, 255, 0.55);"
-                : "background: transparent;";
+                : "";
+        EnumSet<OverlayElementType> usedElementTypes = collectUsedElementTypes(project);
         String rootChrome = includeBodyPageChrome
                 ? """
                         %s {
@@ -354,59 +356,78 @@ public final class HtmlExportService {
                 .append("    line-height: 1;\n")
                 .append("    white-space: pre-wrap;\n")
                 .append("}\n");
-        css.append(rootSelector).append(" .overlay-text {\n")
-                .append("    ").append(textFieldBorder).append('\n')
-                .append("    background: transparent;\n")
-                .append("    color: #0a0d11;\n")
-                .append("    ").append(fontSize10).append('\n')
-                .append("}\n");
-        css.append(rootSelector).append(" .overlay-label {\n")
-                .append("    color: #0a0d11;\n")
-                .append("    ").append(fontSize10).append('\n')
-                .append("    white-space: nowrap;\n")
-                .append("}\n");
-        css.append(rootSelector).append(" .overlay-button {\n")
-                .append("    border: 1px solid #3d4d5d;\n")
-                .append("    background: #e7edf4;\n")
-                .append("    color: #0a0d11;\n")
-                .append("    ").append(fontSize9).append('\n')
-                .append("    text-align: center;\n")
-                .append("}\n");
-        css.append(rootSelector).append(" .overlay-marker {\n")
-                .append("    border-radius: 999px;\n")
-                .append("    border: 1px solid #8d0000;\n")
-                .append("    background: #e00000;\n")
-                .append("}\n");
-        css.append(rootSelector).append(" table.overlay-table {\n")
-                .append("    position: absolute;\n")
-                .append("    table-layout: fixed;\n")
-                .append("    border-collapse: collapse;\n")
-                .append("    border-spacing: 0;\n")
-                .append("    background: transparent;\n")
-                .append("}\n");
-        css.append(rootSelector).append(" table.overlay-table > colgroup > col {\n")
-                .append("    border: none;\n")
-                .append("}\n");
-        css.append(rootSelector).append(" table.overlay-table > thead > tr > th {\n")
-                .append("    ").append(tableHeaderBorder).append('\n')
-                .append("    ").append(tableHeaderBackground).append('\n')
-                .append("    color: #0a0d11;\n")
-                .append("    ").append(fontSize10).append('\n')
-                .append("    font-weight: 700;\n")
-                .append("    padding: 2px 4px;\n")
-                .append("    line-height: 1;\n")
-                .append("    text-align: left;\n")
-                .append("    vertical-align: top;\n")
-                .append("}\n");
-        css.append(rootSelector).append(" table.overlay-table > tbody > tr > td {\n")
-                .append("    ").append(tableCellBorder).append('\n')
-                .append("    ").append(tableCellBackground).append('\n')
-                .append("    color: #0a0d11;\n")
-                .append("    ").append(fontSize10).append('\n')
-                .append("    padding: 2px 4px;\n")
-                .append("    line-height: 1;\n")
-                .append("    vertical-align: top;\n")
-                .append("}\n");
+        if (usedElementTypes.contains(OverlayElementType.TEXT_FIELD)) {
+            css.append(rootSelector).append(" .overlay-text {\n");
+            if (!textFieldBorder.isBlank()) {
+                css.append("    ").append(textFieldBorder).append('\n');
+            }
+            if (!fontSize10.isBlank()) {
+                css.append("    ").append(fontSize10).append('\n');
+            }
+            css.append("}\n");
+        }
+        if (usedElementTypes.contains(OverlayElementType.LABEL)) {
+            css.append(rootSelector).append(" .overlay-label {\n");
+            if (!fontSize10.isBlank()) {
+                css.append("    ").append(fontSize10).append('\n');
+            }
+            css.append("    white-space: nowrap;\n")
+                    .append("}\n");
+        }
+        if (usedElementTypes.contains(OverlayElementType.BUTTON)) {
+            css.append(rootSelector).append(" .overlay-button {\n");
+            if (!fontSize9.isBlank()) {
+                css.append("    ").append(fontSize9).append('\n');
+            }
+            css.append("    text-align: center;\n")
+                    .append("}\n");
+        }
+        if (usedElementTypes.contains(OverlayElementType.MARKER)) {
+            css.append(rootSelector).append(" .overlay-marker {\n")
+                    .append("    border-radius: 999px;\n")
+                    .append("}\n");
+        }
+        if (usedElementTypes.contains(OverlayElementType.TABLE)) {
+            css.append(rootSelector).append(" table.overlay-table {\n")
+                    .append("    position: absolute;\n")
+                    .append("    table-layout: fixed;\n")
+                    .append("    border-collapse: collapse;\n")
+                    .append("    border-spacing: 0;\n")
+                    .append("}\n");
+            css.append(rootSelector).append(" table.overlay-table > colgroup > col {\n")
+                    .append("    border: none;\n")
+                    .append("}\n");
+            css.append(rootSelector).append(" table.overlay-table > thead > tr > th {\n");
+            if (!tableHeaderBorder.isBlank()) {
+                css.append("    ").append(tableHeaderBorder).append('\n');
+            }
+            if (!tableHeaderBackground.isBlank()) {
+                css.append("    ").append(tableHeaderBackground).append('\n');
+            }
+            if (!fontSize10.isBlank()) {
+                css.append("    ").append(fontSize10).append('\n');
+            }
+            css.append("    font-weight: 700;\n")
+                    .append("    padding: 2px 4px;\n")
+                    .append("    line-height: 1;\n")
+                    .append("    text-align: left;\n")
+                    .append("    vertical-align: top;\n")
+                    .append("}\n");
+            css.append(rootSelector).append(" table.overlay-table > tbody > tr > td {\n");
+            if (!tableCellBorder.isBlank()) {
+                css.append("    ").append(tableCellBorder).append('\n');
+            }
+            if (!tableCellBackground.isBlank()) {
+                css.append("    ").append(tableCellBackground).append('\n');
+            }
+            if (!fontSize10.isBlank()) {
+                css.append("    ").append(fontSize10).append('\n');
+            }
+            css.append("    padding: 2px 4px;\n")
+                    .append("    line-height: 1;\n")
+                    .append("    vertical-align: top;\n")
+                    .append("}\n");
+        }
         css.append("@media print {\n");
         appendCssBlock(css, indentCssBlock(printRootReset, 1));
         css.append("    ").append(rootSelector).append(" .preprinted-sheet {\n")
@@ -435,6 +456,17 @@ public final class HtmlExportService {
             builder.append(indent).append(line).append('\n');
         }
         return builder.toString();
+    }
+
+    private EnumSet<OverlayElementType> collectUsedElementTypes(OverlayProject project) {
+        EnumSet<OverlayElementType> types = EnumSet.noneOf(OverlayElementType.class);
+        for (PdfPageMetadata pageMetadata : project.getMetadata().getPages()) {
+            OverlayPage overlayPage = project.getOverlayPage(pageMetadata.pageIndex());
+            for (OverlayElement element : overlayPage.mutableElements()) {
+                types.add(element.getType());
+            }
+        }
+        return types;
     }
 
     private String buildPageMarkup(PdfPageMetadata pageMetadata, OverlayPage overlayPage,

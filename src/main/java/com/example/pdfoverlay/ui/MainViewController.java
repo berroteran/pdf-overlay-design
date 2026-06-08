@@ -3058,7 +3058,7 @@ public final class MainViewController {
 
     private void updateFinalSourceView() {
         String source = latestFinalSource == null ? "" : latestFinalSource;
-        String plainHtml = buildPlainSourceDocument(source, "Final Source");
+        String plainHtml = buildPlainSourceDocument(source);
         finalSourceWebView.getEngine().loadContent(plainHtml, "text/html");
     }
 
@@ -3218,14 +3218,10 @@ public final class MainViewController {
         );
     }
 
-    private String buildPlainSourceDocument(String sourceCode, String titleText) {
+    private String buildPlainSourceDocument(String sourceCode) {
         String escaped = escapeHtml(sourceCode);
-        String title = "Block: " + escapeHtml(titleText);
         String bodyBackground = activeTheme != null && activeTheme.isDark() ? "#151a20" : "#ffffff";
         String bodyColor = activeTheme != null && activeTheme.isDark() ? "#e7edf5" : "#212529";
-        String headerBackground = activeTheme != null && activeTheme.isDark() ? "#202833" : "#f3f5f7";
-        String headerBorder = activeTheme != null && activeTheme.isDark() ? "#4a5667" : "#dde2e7";
-        String headerColor = activeTheme != null && activeTheme.isDark() ? "#b8c7d9" : "#445061";
         return """
                 <!doctype html>
                 <html>
@@ -3241,17 +3237,6 @@ public final class MainViewController {
                       color: %s;
                       font-family: Consolas, Menlo, Monaco, monospace;
                     }
-                    .header {
-                      position: sticky;
-                      top: 0;
-                      z-index: 1;
-                      padding: 8px 12px;
-                      background: %s;
-                      border-bottom: 1px solid %s;
-                      color: %s;
-                      font-size: 12px;
-                      font-weight: 600;
-                    }
                     pre {
                       margin: 0;
                       padding: 12px;
@@ -3264,17 +3249,12 @@ public final class MainViewController {
                   </style>
                 </head>
                 <body>
-                  <div class="header">%s</div>
                   <pre>%s</pre>
                 </body>
                 </html>
                 """.formatted(
                 bodyBackground,
                 bodyColor,
-                headerBackground,
-                headerBorder,
-                headerColor,
-                title,
                 escaped
         );
     }
@@ -3349,11 +3329,11 @@ public final class MainViewController {
         CheckBox exportFontCheck = new CheckBox("General: export font");
         exportFontCheck.setSelected(true);
         CheckBox exportTableColorsCheck = new CheckBox("Tables: export colors");
-        exportTableColorsCheck.setSelected(true);
+        exportTableColorsCheck.setSelected(false);
         CheckBox exportTableBordersCheck = new CheckBox("Tables: export borders");
-        exportTableBordersCheck.setSelected(true);
+        exportTableBordersCheck.setSelected(false);
         CheckBox exportTextBordersCheck = new CheckBox("Text fields: export borders");
-        exportTextBordersCheck.setSelected(true);
+        exportTextBordersCheck.setSelected(false);
 
         VBox content = new VBox(
                 8,

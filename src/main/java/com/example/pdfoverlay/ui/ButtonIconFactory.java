@@ -39,6 +39,24 @@ public final class ButtonIconFactory {
     }
 
     /**
+     * @return ícono de carpeta para menús de archivo.
+     */
+    public static Node fileMenuIcon() {
+        Rectangle body = new Rectangle(1.8, 4.0, 10.6, 7.0);
+        body.setArcWidth(1.6);
+        body.setArcHeight(1.6);
+        body.setFill(Color.web("#f0d89b"));
+        body.setStroke(STROKE);
+        body.setStrokeWidth(1.0);
+
+        Polygon tab = new Polygon(2.2, 4.0, 4.6, 2.3, 7.2, 2.3, 8.4, 4.0);
+        tab.setFill(Color.web("#e6c671"));
+        tab.setStroke(STROKE);
+        tab.setStrokeWidth(1.0);
+        return wrap(new Group(body, tab));
+    }
+
+    /**
      * @return ícono para abrir HTML.
      */
     public static Node openHtmlIcon() {
@@ -90,6 +108,25 @@ public final class ButtonIconFactory {
      */
     public static Node printPdfIcon() {
         return wrap(createPrinterIcon(ACCENT_RED));
+    }
+
+    /**
+     * @return ícono para salir/cerrar.
+     */
+    public static Node exitIcon() {
+        Rectangle door = new Rectangle(2.2, 2.0, 5.0, 10.0);
+        door.setFill(Color.web("#e9edf2"));
+        door.setStroke(STROKE);
+        door.setStrokeWidth(1.0);
+
+        Circle knob = new Circle(6.0, 7.0, 0.5);
+        knob.setFill(ACCENT_GRAY);
+
+        Line arrowBody = createLine(7.6, 7.0, 12.0, 7.0, ACCENT_RED, 1.5);
+        Line arrowTop = createLine(10.2, 5.2, 12.0, 7.0, ACCENT_RED, 1.5);
+        Line arrowBottom = createLine(10.2, 8.8, 12.0, 7.0, ACCENT_RED, 1.5);
+
+        return wrap(new Group(door, knob, arrowBody, arrowTop, arrowBottom));
     }
 
     /**

@@ -44,6 +44,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
@@ -154,7 +155,6 @@ public final class MainViewController {
 
     private final Button openHtmlButton;
     private final Button exportButton;
-    private final Button exportErpNextButton;
     private final Button printHtmlButton;
     private final Button printPdfButton;
     private final Button previousPageButton;
@@ -230,7 +230,6 @@ public final class MainViewController {
 
         this.openHtmlButton = new Button("Open HTML");
         this.exportButton = new Button("Save Project As...");
-        this.exportErpNextButton = new Button("Export ERPNext...");
         this.printHtmlButton = new Button("Print HTML");
         this.printPdfButton = new Button("Print PDF");
         this.previousPageButton = new Button("< Prev");
@@ -519,35 +518,49 @@ public final class MainViewController {
     private MenuBar buildMenuBar() {
         MenuItem openPdfMenuItem = new MenuItem("Open PDF...");
         openPdfMenuItem.setOnAction(event -> openPdfFile());
+        openPdfMenuItem.setGraphic(ButtonIconFactory.openPdfIcon());
 
         MenuItem openProjectMenuItem = new MenuItem("Open Project HTML...");
         openProjectMenuItem.setOnAction(event -> openHtmlFile());
+        openProjectMenuItem.setGraphic(ButtonIconFactory.openHtmlIcon());
 
         MenuItem saveProjectMenuItem = new MenuItem("Save Project As...");
         saveProjectMenuItem.setOnAction(event -> saveProjectHtml());
+        saveProjectMenuItem.setGraphic(ButtonIconFactory.saveHtmlIcon());
 
         MenuItem exportErpNextMenuItem = new MenuItem("Export ERPNext...");
         exportErpNextMenuItem.setOnAction(event -> exportErpNextFragment());
+        exportErpNextMenuItem.setGraphic(ButtonIconFactory.saveHtmlIcon());
 
         MenuItem printHtmlMenuItem = new MenuItem("Print HTML...");
         printHtmlMenuItem.setOnAction(event -> printHtmlLayer());
+        printHtmlMenuItem.setGraphic(ButtonIconFactory.printHtmlIcon());
 
         MenuItem printPdfMenuItem = new MenuItem("Print PDF...");
         printPdfMenuItem.setOnAction(event -> printPdfDocument());
+        printPdfMenuItem.setGraphic(ButtonIconFactory.printPdfIcon());
 
         MenuItem exitMenuItem = new MenuItem("Exit");
         exitMenuItem.setOnAction(event -> requestApplicationClose());
+        exitMenuItem.setGraphic(ButtonIconFactory.exitIcon());
+
+        Menu openMenu = new Menu("Open");
+        openMenu.setGraphic(ButtonIconFactory.fileMenuIcon());
+        openMenu.getItems().addAll(openPdfMenuItem, openProjectMenuItem);
+
+        Menu printMenu = new Menu("Print");
+        printMenu.setGraphic(ButtonIconFactory.printHtmlIcon());
+        printMenu.getItems().addAll(printHtmlMenuItem, printPdfMenuItem);
 
         Menu fileMenu = new Menu("File");
+        fileMenu.setGraphic(ButtonIconFactory.fileMenuIcon());
         fileMenu.getItems().addAll(
-                openPdfMenuItem,
-                openProjectMenuItem,
+                openMenu,
                 new SeparatorMenuItem(),
                 saveProjectMenuItem,
                 exportErpNextMenuItem,
                 new SeparatorMenuItem(),
-                printHtmlMenuItem,
-                printPdfMenuItem,
+                printMenu,
                 new SeparatorMenuItem(),
                 exitMenuItem
         );
@@ -557,26 +570,14 @@ public final class MainViewController {
     }
 
     private Node buildTopToolbar() {
-        Button openButton = new Button("Open PDF");
-        openButton.setOnAction(event -> openPdfFile());
-        applyToolbarButtonStyle(openButton);
-        applyButtonIcon(openButton, ButtonIconFactory.openPdfIcon());
-
-        openHtmlButton.setOnAction(event -> openHtmlFile());
-        exportButton.setOnAction(event -> saveProjectHtml());
-        exportErpNextButton.setOnAction(event -> exportErpNextFragment());
         printHtmlButton.setOnAction(event -> printHtmlLayer());
         printPdfButton.setOnAction(event -> printPdfDocument());
-        applyToolbarButtonStyle(openHtmlButton);
-        applyToolbarButtonStyle(exportButton);
-        applyToolbarButtonStyle(exportErpNextButton);
         applyToolbarButtonStyle(printHtmlButton);
         applyToolbarButtonStyle(printPdfButton);
-        applyButtonIcon(openHtmlButton, ButtonIconFactory.openHtmlIcon());
-        applyButtonIcon(exportButton, ButtonIconFactory.saveHtmlIcon());
-        applyButtonIcon(exportErpNextButton, ButtonIconFactory.saveHtmlIcon());
         applyButtonIcon(printHtmlButton, ButtonIconFactory.printHtmlIcon());
         applyButtonIcon(printPdfButton, ButtonIconFactory.printPdfIcon());
+        applyButtonTooltip(printHtmlButton, "Print HTML");
+        applyButtonTooltip(printPdfButton, "Print PDF");
 
         previousPageButton.setOnAction(event -> goToPage(currentPageIndex - 1));
         nextPageButton.setOnAction(event -> goToPage(currentPageIndex + 1));
@@ -584,6 +585,8 @@ public final class MainViewController {
         applyToolbarButtonStyle(nextPageButton);
         applyButtonIcon(previousPageButton, ButtonIconFactory.previousPageIcon());
         applyButtonIcon(nextPageButton, ButtonIconFactory.nextPageIcon());
+        applyButtonTooltip(previousPageButton, "Previous page");
+        applyButtonTooltip(nextPageButton, "Next page");
 
         ToggleButton selectToolButton = createToolButton("Select", EditorTool.SELECT, true, ButtonIconFactory.selectToolIcon());
         ToggleButton textFieldToolButton = createToolButton("Text", EditorTool.TEXT_FIELD, false, ButtonIconFactory.textToolIcon());
@@ -598,10 +601,6 @@ public final class MainViewController {
 
         HBox toolbar = new HBox(
                 10,
-                openButton,
-                openHtmlButton,
-                exportButton,
-                exportErpNextButton,
                 printHtmlButton,
                 printPdfButton,
                 new Separator(),
@@ -632,6 +631,7 @@ public final class MainViewController {
         button.setSelected(selected);
         applyToolbarButtonStyle(button);
         applyButtonIcon(button, icon);
+        applyButtonTooltip(button, label + " tool");
         return button;
     }
 
@@ -654,12 +654,16 @@ public final class MainViewController {
         applyTextButton.setOnAction(event -> applySelectedElementText());
         applyTextButton.getStyleClass().add("action-button-medium");
         applyButtonIcon(applyTextButton, ButtonIconFactory.applyTextIcon());
+        applyButtonTooltip(applyTextButton, "Apply text");
 
         applyTableConfigButton.getStyleClass().add("action-button-medium");
+        applyButtonTooltip(applyTableConfigButton, "Apply table config");
 
         deleteSelectedButton.setOnAction(event -> removeSelectedElement());
         deleteSelectedButton.getStyleClass().add("action-button-medium");
         applyButtonIcon(deleteSelectedButton, ButtonIconFactory.deleteIcon());
+        applyButtonTooltip(deleteSelectedButton, "Delete selected element");
+        applyButtonTooltip(applyElementIdButton, "Apply element ID");
 
         VBox panel = new VBox(
                 10,
@@ -716,6 +720,10 @@ public final class MainViewController {
         button.setGraphic(icon);
         button.setContentDisplay(ContentDisplay.LEFT);
         button.setGraphicTextGap(6);
+    }
+
+    private void applyButtonTooltip(ButtonBase button, String text) {
+        button.setTooltip(new Tooltip(text));
     }
 
     private Node buildStatusBar() {
@@ -1878,7 +1886,6 @@ public final class MainViewController {
     private void updateButtonsState() {
         boolean hasProject = currentProject != null;
         exportButton.setDisable(!hasProject);
-        exportErpNextButton.setDisable(!hasProject);
         printHtmlButton.setDisable(!hasProject);
         printPdfButton.setDisable(!hasProject);
         previousPageButton.setDisable(!hasProject || currentPageIndex <= 0);

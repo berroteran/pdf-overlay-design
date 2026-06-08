@@ -47,8 +47,9 @@ redimensionar una tabla, el ancho total y los anchos de columnas se actualizan
 en milímetros y se reflejan en el inspector.
 
 La herramienta `Measure` no guarda datos en el proyecto. Su recuadro temporal
-se borra al hacer click posterior o presionar cualquier tecla; el último valor
-queda visible junto al botón.
+se mantiene visible después de capturar. Al hacer click fuera del recuadro o
+presionar una tecla, el modo vuelve a `Select` y el recuadro se oculta. El
+último valor queda visible junto al botón hasta volver a activar `Measure`.
 
 ## Guardado, Exportación e Impresión
 
@@ -153,7 +154,7 @@ Documentación ampliada:
 - `Ctrl/Cmd + rueda mouse`: zoom in/out.
 - `Ctrl/Cmd + Z`: deshacer último borrado.
 - `DEL`: borrar elemento seleccionado.
-- Cualquier tecla: limpia el recuadro temporal de medición si está visible.
+- Cualquier tecla: cancela `Measure`, oculta el recuadro y vuelve a `Select`.
 
 ## Stack Técnico
 

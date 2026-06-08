@@ -43,8 +43,10 @@ elementos persistentes.
 3. Leer el valor `W x H` junto al botón o en la etiqueta del recuadro.
 4. Usar ese valor para configurar ancho de tabla, columnas o controles.
 
-El recuadro temporal se elimina al hacer click posterior o al presionar una
-tecla. El último valor queda visible junto al botón.
+El recuadro temporal queda visible después de capturar la medición. Al hacer
+click fuera del recuadro o presionar una tecla, el modo se cancela, vuelve a
+`Select` y el recuadro se oculta. El último valor queda visible junto al botón
+hasta volver a presionar `Measure`.
 
 ## Tablas
 
@@ -112,4 +114,4 @@ El zoom se controla desde la barra inferior o con atajos.
 | `Ctrl/Cmd + rueda mouse` | Zoom interactivo. |
 | `Ctrl/Cmd + Z` | Deshacer último borrado. |
 | `DEL` | Borrar elemento seleccionado. |
-| Cualquier tecla | Limpia medición temporal visible. |
+| Cualquier tecla | Cancela `Measure`, oculta el recuadro y vuelve a `Select`. |

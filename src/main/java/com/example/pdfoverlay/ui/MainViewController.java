@@ -412,6 +412,19 @@ public final class MainViewController {
         activeMeasurementState = null;
     }
 
+    private void resetMeasurementReadout() {
+        measurementValueLabel.setText("W x H: -");
+        measurementOverlayLabel.setText("");
+    }
+
+    private void finishMeasurementMode(String statusMessage) {
+        hideMeasurementOverlay();
+        if (activeTool == EditorTool.MEASURE) {
+            activateTool(EditorTool.SELECT);
+        }
+        statusLabel.setText(statusMessage);
+    }
+
     private void installResizeHandles() {
         for (Region handle : resizeHandles.values()) {
             if (!overlayPane.getChildren().contains(handle)) {
@@ -480,13 +493,15 @@ public final class MainViewController {
 
     private void configureActions() {
         root.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
-            if (activeMeasurementState == null && isMeasurementOverlayVisible()) {
-                hideMeasurementOverlay();
+            if (activeMeasurementState == null
+                    && isMeasurementOverlayVisible()
+                    && isClickOutsideMeasurementOverlay(event)) {
+                finishMeasurementMode("Measurement mode cancelled");
             }
         });
         root.addEventHandler(javafx.scene.input.KeyEvent.KEY_PRESSED, event -> {
-            if (isMeasurementOverlayVisible()) {
-                hideMeasurementOverlay();
+            if (activeTool == EditorTool.MEASURE || isMeasurementOverlayVisible()) {
+                finishMeasurementMode("Measurement mode cancelled");
                 event.consume();
                 return;
             }
@@ -607,6 +622,8 @@ public final class MainViewController {
                 activeTool = tool;
                 if (activeTool == EditorTool.MEASURE) {
                     clearSelection();
+                    hideMeasurementOverlay();
+                    resetMeasurementReadout();
                     statusLabel.setText("Drag on the overlay to measure W x H in millimeters");
                 } else {
                     hideMeasurementOverlay();
@@ -1849,6 +1866,11 @@ public final class MainViewController {
         }
 
         Point2D point = getClampedOverlayPoint(event);
+        if (activeMeasurementState == null && isMeasurementOverlayVisible() && isPointInsideMeasurementOverlay(point)) {
+            event.consume();
+            return;
+        }
+
         activeMeasurementState = new MeasurementState(point.getX(), point.getY());
         clearSelection();
         measurementRectangle.setVisible(true);
@@ -1877,8 +1899,7 @@ public final class MainViewController {
         double measuredHeight = Math.abs(point.getY() - activeMeasurementState.startY());
         activeMeasurementState = null;
         if (measuredWidth < 1.0d && measuredHeight < 1.0d) {
-            hideMeasurementOverlay();
-            statusLabel.setText("Measurement cancelled");
+            finishMeasurementMode("Measurement cancelled");
         } else {
             statusLabel.setText("Measurement captured: " + measurementValueLabel.getText());
         }
@@ -1897,6 +1918,19 @@ public final class MainViewController {
                 clamp(localPoint.getX(), 0.0d, currentPagePixelWidth),
                 clamp(localPoint.getY(), 0.0d, currentPagePixelHeight)
         );
+    }
+
+    private boolean isClickOutsideMeasurementOverlay(MouseEvent event) {
+        Point2D localPoint = overlayPane.sceneToLocal(event.getSceneX(), event.getSceneY());
+        return !isPointInsideMeasurementOverlay(localPoint);
+    }
+
+    private boolean isPointInsideMeasurementOverlay(Point2D localPoint) {
+        if (!isMeasurementOverlayVisible()) {
+            return false;
+        }
+        return measurementRectangle.getBoundsInParent().contains(localPoint)
+                || measurementOverlayLabel.getBoundsInParent().contains(localPoint);
     }
 
     private void updateMeasurementOverlay(Point2D currentPoint) {

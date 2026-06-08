@@ -17,6 +17,7 @@ import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
+import javafx.scene.Cursor;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.Group;
@@ -72,9 +73,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -102,6 +104,9 @@ public final class MainViewController {
     private static final int MAX_TABLE_COLUMNS = 12;
     private static final double ZOOM_STEP_PERCENT = 10.0d;
     private static final int AUTO_FIT_MAX_ATTEMPTS = 16;
+    private static final double RESIZE_HANDLE_SIZE = 8.0d;
+    private static final double MIN_RESIZABLE_SIZE = 8.0d;
+    private static final double MIN_MARKER_SIZE = 6.0d;
     private static final String SOURCE_BLOCK_FULL = "Full document";
     private static final String SOURCE_BLOCK_HEAD = "HEAD";
     private static final String SOURCE_BLOCK_STYLE = "STYLE";
@@ -164,6 +169,7 @@ public final class MainViewController {
     private final Button deleteSelectedButton;
 
     private final Map<String, Region> elementNodes;
+    private final Map<ResizeHandlePosition, Region> resizeHandles;
     private final Deque<DeletedElementSnapshot> deletedElementsHistory;
 
     private EditorTool activeTool;
@@ -172,6 +178,7 @@ public final class MainViewController {
     private int currentPageIndex;
     private OverlayElement selectedElement;
     private Region selectedNode;
+    private ResizeState activeResizeState;
     private boolean autoFitZoomOnNextLoad;
     private int autoFitPendingAttempts;
     private String latestGeneratedHtmlSource;
@@ -239,6 +246,7 @@ public final class MainViewController {
         this.deleteSelectedButton = new Button("Delete selected");
 
         this.elementNodes = new HashMap<>();
+        this.resizeHandles = new EnumMap<>(ResizeHandlePosition.class);
         this.deletedElementsHistory = new ArrayDeque<>();
         this.selectedElementIdField.setDisable(true);
         this.applyElementIdButton.setDisable(true);
@@ -257,6 +265,7 @@ public final class MainViewController {
         this.activeTheme = UiTheme.MODENA;
 
         configureCanvas();
+        configureResizeHandles();
         configureActions();
         configureThemeSelector();
         zoomValueLabel.setText(formatZoomPercentage(zoomSlider.getValue()));
@@ -324,6 +333,89 @@ public final class MainViewController {
         canvasWorkspacePane.add(topRulerCanvas, 1, 0);
         canvasWorkspacePane.add(leftRulerCanvas, 0, 1);
         canvasWorkspacePane.add(canvasScrollPane, 1, 1);
+    }
+
+    private void configureResizeHandles() {
+        for (ResizeHandlePosition position : ResizeHandlePosition.values()) {
+            Region handle = new Region();
+            handle.getStyleClass().add("resize-handle");
+            handle.setManaged(false);
+            handle.setVisible(false);
+            handle.setCursor(position.cursor());
+            handle.setPrefSize(RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
+            handle.setMinSize(RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
+            handle.setMaxSize(RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE);
+            handle.setOnMousePressed(event -> handleResizePressed(event, position));
+            handle.setOnMouseDragged(event -> handleResizeDragged(event, position));
+            handle.setOnMouseReleased(event -> handleResizeReleased(event));
+            resizeHandles.put(position, handle);
+        }
+    }
+
+    private void installResizeHandles() {
+        for (Region handle : resizeHandles.values()) {
+            if (!overlayPane.getChildren().contains(handle)) {
+                overlayPane.getChildren().add(handle);
+            }
+        }
+        hideResizeHandles();
+    }
+
+    private void showResizeHandles() {
+        if (selectedNode == null) {
+            hideResizeHandles();
+            return;
+        }
+        for (Region handle : resizeHandles.values()) {
+            handle.setVisible(true);
+        }
+        positionResizeHandles();
+        bringResizeHandlesToFront();
+    }
+
+    private void hideResizeHandles() {
+        for (Region handle : resizeHandles.values()) {
+            handle.setVisible(false);
+        }
+    }
+
+    private void bringResizeHandlesToFront() {
+        for (Region handle : resizeHandles.values()) {
+            handle.toFront();
+        }
+    }
+
+    private void positionResizeHandles() {
+        if (selectedNode == null) {
+            return;
+        }
+
+        double x = selectedNode.getLayoutX();
+        double y = selectedNode.getLayoutY();
+        double width = selectedNode.getPrefWidth();
+        double height = selectedNode.getPrefHeight();
+        double halfHandle = RESIZE_HANDLE_SIZE / 2.0d;
+
+        for (Map.Entry<ResizeHandlePosition, Region> entry : resizeHandles.entrySet()) {
+            ResizeHandlePosition position = entry.getKey();
+            Region handle = entry.getValue();
+            double handleCenterX = switch (position.horizontalAnchor()) {
+                case START -> x;
+                case CENTER -> x + width / 2.0d;
+                case END -> x + width;
+            };
+            double handleCenterY = switch (position.verticalAnchor()) {
+                case START -> y;
+                case CENTER -> y + height / 2.0d;
+                case END -> y + height;
+            };
+            handle.resizeRelocate(
+                    handleCenterX - halfHandle,
+                    handleCenterY - halfHandle,
+                    RESIZE_HANDLE_SIZE,
+                    RESIZE_HANDLE_SIZE
+            );
+        }
     }
 
     private void configureActions() {
@@ -889,6 +981,7 @@ public final class MainViewController {
         overlayPane.getChildren().clear();
         elementNodes.clear();
         clearSelection();
+        installResizeHandles();
 
         if (currentProject == null) {
             return;
@@ -900,6 +993,7 @@ public final class MainViewController {
             elementNodes.put(element.getId(), node);
             overlayPane.getChildren().add(node);
         }
+        bringResizeHandlesToFront();
     }
 
     private void redrawMeasurementGuides() {
@@ -1136,13 +1230,9 @@ public final class MainViewController {
         node.getStyleClass().add("overlay-node");
         node.setManaged(true);
 
-        double nodeWidth = Math.max(8, element.getWidthRatio() * currentPagePixelWidth);
-        double nodeHeight = Math.max(8, element.getHeightRatio() * currentPagePixelHeight);
-
-        if (element.getType() == OverlayElementType.MARKER) {
-            nodeWidth = 10;
-            nodeHeight = 10;
-        }
+        double minimumSize = element.getType() == OverlayElementType.MARKER ? MIN_MARKER_SIZE : MIN_RESIZABLE_SIZE;
+        double nodeWidth = Math.max(minimumSize, element.getWidthRatio() * currentPagePixelWidth);
+        double nodeHeight = Math.max(minimumSize, element.getHeightRatio() * currentPagePixelHeight);
 
         node.setPrefSize(nodeWidth, nodeHeight);
         node.setMinSize(nodeWidth, nodeHeight);
@@ -1282,6 +1372,7 @@ public final class MainViewController {
 
             node.relocate(nextX, nextY);
             updateElementFromNode(element, node);
+            positionResizeHandles();
             dragState.moved = true;
             event.consume();
         });
@@ -1298,6 +1389,117 @@ public final class MainViewController {
             selectElement(element, node);
             event.consume();
         });
+    }
+
+    private void handleResizePressed(MouseEvent event, ResizeHandlePosition position) {
+        if (selectedElement == null || selectedNode == null) {
+            event.consume();
+            return;
+        }
+        activeResizeState = new ResizeState(
+                event.getSceneX(),
+                event.getSceneY(),
+                selectedNode.getLayoutX(),
+                selectedNode.getLayoutY(),
+                selectedNode.getPrefWidth(),
+                selectedNode.getPrefHeight(),
+                selectedElement.getType() == OverlayElementType.TABLE
+                        ? getElementWidthMillimeters(selectedElement)
+                        : 0.0d,
+                selectedElement.getType() == OverlayElementType.TABLE
+                        ? selectedElement.getTableColumnWidths()
+                        : ""
+        );
+        event.consume();
+    }
+
+    private void handleResizeDragged(MouseEvent event, ResizeHandlePosition position) {
+        if (activeResizeState == null || selectedElement == null || selectedNode == null) {
+            event.consume();
+            return;
+        }
+
+        double scale = Math.max(0.0001d, pageStack.getScaleX());
+        double deltaX = (event.getSceneX() - activeResizeState.startMouseX()) / scale;
+        double deltaY = (event.getSceneY() - activeResizeState.startMouseY()) / scale;
+
+        ResizeBounds nextBounds = calculateResizeBounds(position, deltaX, deltaY, activeResizeState);
+        applyNodeBounds(selectedNode, nextBounds.x(), nextBounds.y(), nextBounds.width(), nextBounds.height());
+        updateElementFromNode(selectedElement, selectedNode);
+        updateTableColumnWidthsAfterResize(activeResizeState);
+        updateTableInspectorFields(selectedElement);
+        positionResizeHandles();
+        event.consume();
+    }
+
+    private void handleResizeReleased(MouseEvent event) {
+        if (activeResizeState != null) {
+            markProjectDirty();
+            statusLabel.setText("Element resized");
+            activeResizeState = null;
+        }
+        event.consume();
+    }
+
+    private ResizeBounds calculateResizeBounds(ResizeHandlePosition position, double deltaX, double deltaY,
+                                               ResizeState resizeState) {
+        double x = resizeState.startNodeX();
+        double y = resizeState.startNodeY();
+        double width = resizeState.startNodeWidth();
+        double height = resizeState.startNodeHeight();
+        double minimumSize = selectedElement != null && selectedElement.getType() == OverlayElementType.MARKER
+                ? MIN_MARKER_SIZE
+                : MIN_RESIZABLE_SIZE;
+
+        if (position.resizesLeft()) {
+            double proposedX = clamp(x + deltaX, 0.0d, x + width - minimumSize);
+            width = width + (x - proposedX);
+            x = proposedX;
+        }
+        if (position.resizesRight()) {
+            width = clamp(width + deltaX, minimumSize, currentPagePixelWidth - x);
+        }
+        if (position.resizesTop()) {
+            double proposedY = clamp(y + deltaY, 0.0d, y + height - minimumSize);
+            height = height + (y - proposedY);
+            y = proposedY;
+        }
+        if (position.resizesBottom()) {
+            height = clamp(height + deltaY, minimumSize, currentPagePixelHeight - y);
+        }
+
+        return new ResizeBounds(x, y, width, height);
+    }
+
+    private void applyNodeBounds(Region node, double x, double y, double width, double height) {
+        node.setPrefSize(width, height);
+        node.setMinSize(width, height);
+        node.setMaxSize(width, height);
+        node.resizeRelocate(x, y, width, height);
+    }
+
+    private void updateTableColumnWidthsAfterResize(ResizeState resizeState) {
+        if (selectedElement == null || selectedElement.getType() != OverlayElementType.TABLE) {
+            return;
+        }
+        double originalTableWidth = resizeState.startTableWidthMillimeters();
+        double resizedTableWidth = getElementWidthMillimeters(selectedElement);
+        if (originalTableWidth <= 0.0d || resizedTableWidth <= 0.0d) {
+            return;
+        }
+
+        int columns = Math.max(1, selectedElement.getTableColumnCount());
+        List<Double> originalWidths = parseColumnWidths(
+                resizeState.startTableColumnWidths(),
+                columns,
+                originalTableWidth
+        );
+        double ratio = resizedTableWidth / originalTableWidth;
+        List<Double> resizedWidths = new ArrayList<>();
+        for (double originalWidth : originalWidths) {
+            resizedWidths.add(Math.max(1.0d, originalWidth * ratio));
+        }
+        selectedElement.setTableColumnWidths(formatColumnWidths(resizedWidths));
     }
 
     private void handleCanvasClick(MouseEvent event) {
@@ -1423,6 +1625,7 @@ public final class MainViewController {
         if (!selectedNode.getStyleClass().contains("overlay-selected")) {
             selectedNode.getStyleClass().add("overlay-selected");
         }
+        showResizeHandles();
 
         selectedElementTypeLabel.setText(element.getType().name());
         selectedElementIdField.setText(element.getId());
@@ -1439,6 +1642,8 @@ public final class MainViewController {
         }
         selectedElement = null;
         selectedNode = null;
+        activeResizeState = null;
+        hideResizeHandles();
         selectedElementTypeLabel.setText("None");
         selectedElementIdField.clear();
         selectedElementIdField.setDisable(true);
@@ -2536,6 +2741,77 @@ public final class MainViewController {
         private double dragStartNodeX;
         private double dragStartNodeY;
         private boolean moved;
+    }
+
+    /**
+     * Estado temporal para operaciones de resize.
+     */
+    private record ResizeState(double startMouseX,
+                               double startMouseY,
+                               double startNodeX,
+                               double startNodeY,
+                               double startNodeWidth,
+                               double startNodeHeight,
+                               double startTableWidthMillimeters,
+                               String startTableColumnWidths) {
+    }
+
+    private record ResizeBounds(double x, double y, double width, double height) {
+    }
+
+    private enum ResizeAnchor {
+        START,
+        CENTER,
+        END
+    }
+
+    private enum ResizeHandlePosition {
+        NORTH_WEST(ResizeAnchor.START, ResizeAnchor.START, Cursor.NW_RESIZE),
+        NORTH(ResizeAnchor.CENTER, ResizeAnchor.START, Cursor.N_RESIZE),
+        NORTH_EAST(ResizeAnchor.END, ResizeAnchor.START, Cursor.NE_RESIZE),
+        EAST(ResizeAnchor.END, ResizeAnchor.CENTER, Cursor.E_RESIZE),
+        SOUTH_EAST(ResizeAnchor.END, ResizeAnchor.END, Cursor.SE_RESIZE),
+        SOUTH(ResizeAnchor.CENTER, ResizeAnchor.END, Cursor.S_RESIZE),
+        SOUTH_WEST(ResizeAnchor.START, ResizeAnchor.END, Cursor.SW_RESIZE),
+        WEST(ResizeAnchor.START, ResizeAnchor.CENTER, Cursor.W_RESIZE);
+
+        private final ResizeAnchor horizontalAnchor;
+        private final ResizeAnchor verticalAnchor;
+        private final Cursor cursor;
+
+        ResizeHandlePosition(ResizeAnchor horizontalAnchor, ResizeAnchor verticalAnchor, Cursor cursor) {
+            this.horizontalAnchor = horizontalAnchor;
+            this.verticalAnchor = verticalAnchor;
+            this.cursor = cursor;
+        }
+
+        private ResizeAnchor horizontalAnchor() {
+            return horizontalAnchor;
+        }
+
+        private ResizeAnchor verticalAnchor() {
+            return verticalAnchor;
+        }
+
+        private Cursor cursor() {
+            return cursor;
+        }
+
+        private boolean resizesLeft() {
+            return horizontalAnchor == ResizeAnchor.START;
+        }
+
+        private boolean resizesRight() {
+            return horizontalAnchor == ResizeAnchor.END;
+        }
+
+        private boolean resizesTop() {
+            return verticalAnchor == ResizeAnchor.START;
+        }
+
+        private boolean resizesBottom() {
+            return verticalAnchor == ResizeAnchor.END;
+        }
     }
 
     /**

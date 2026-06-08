@@ -413,6 +413,15 @@
     -fx-effect: dropshadow(gaussian, -selection-glow, 10, 0.25, 0, 0);
 }
 
+.resize-handle {
+    -fx-background-color: -accent-strong;
+    -fx-border-color: -surface-1;
+    -fx-border-width: 1.5;
+    -fx-background-radius: 2;
+    -fx-border-radius: 2;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 4, 0.2, 0, 1);
+}
+
 .editor-text {
     -fx-background-color: -editor-text-bg;
     -fx-border-color: -editor-border;

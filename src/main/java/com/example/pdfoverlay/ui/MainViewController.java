@@ -690,15 +690,6 @@ public final class MainViewController {
         applyButtonTooltip(printPdfButton, "Print PDF");
         applyButtonTooltip(openHtmlInBrowserButton, "Open HTML overlay in default browser");
 
-        previousPageButton.setOnAction(event -> goToPage(currentPageIndex - 1));
-        nextPageButton.setOnAction(event -> goToPage(currentPageIndex + 1));
-        applyToolbarButtonStyle(previousPageButton);
-        applyToolbarButtonStyle(nextPageButton);
-        applyButtonIcon(previousPageButton, ButtonIconFactory.previousPageIcon());
-        applyButtonIcon(nextPageButton, ButtonIconFactory.nextPageIcon());
-        applyButtonTooltip(previousPageButton, "Previous page");
-        applyButtonTooltip(nextPageButton, "Next page");
-
         ToggleButton selectToolButton = createToolButton("Select", EditorTool.SELECT, true, ButtonIconFactory.selectToolIcon());
         ToggleButton textFieldToolButton = createToolButton("Text", EditorTool.TEXT_FIELD, false, ButtonIconFactory.textToolIcon());
         ToggleButton labelToolButton = createToolButton("Label", EditorTool.LABEL, false, ButtonIconFactory.labelToolIcon());
@@ -716,10 +707,6 @@ public final class MainViewController {
                 printHtmlOnlyButton,
                 printPdfButton,
                 openHtmlInBrowserButton,
-                new Separator(),
-                previousPageButton,
-                nextPageButton,
-                pageLabel,
                 new Separator(),
                 selectToolButton,
                 textFieldToolButton,
@@ -823,6 +810,10 @@ public final class MainViewController {
         button.getStyleClass().add("toolbar-button-large");
     }
 
+    private void applyCompactToolbarButtonStyle(ButtonBase button) {
+        button.getStyleClass().add("toolbar-button-compact");
+    }
+
     /**
      * Aplica ícono y espaciado uniforme para botones con texto.
      *
@@ -844,19 +835,42 @@ public final class MainViewController {
         zoomLabel.getStyleClass().add("status-meta");
         documentSizeLabel.getStyleClass().add("status-meta");
         zoomValueLabel.getStyleClass().add("status-meta");
+        pageLabel.getStyleClass().add("status-page-label");
+
+        previousPageButton.setOnAction(event -> goToPage(currentPageIndex - 1));
+        nextPageButton.setOnAction(event -> goToPage(currentPageIndex + 1));
+        applyCompactToolbarButtonStyle(previousPageButton);
+        applyCompactToolbarButtonStyle(nextPageButton);
+        applyButtonIcon(previousPageButton, ButtonIconFactory.previousPageIcon());
+        applyButtonIcon(nextPageButton, ButtonIconFactory.nextPageIcon());
+        applyButtonTooltip(previousPageButton, "Previous page");
+        applyButtonTooltip(nextPageButton, "Next page");
+
+        HBox pageNavigation = new HBox(
+                8,
+                previousPageButton,
+                nextPageButton,
+                pageLabel
+        );
+        pageNavigation.setAlignment(Pos.CENTER);
+        pageNavigation.getStyleClass().add("status-page-navigation");
 
         zoomSlider.setPrefWidth(180);
 
         Separator statusSeparator = new Separator(Orientation.VERTICAL);
         statusSeparator.setPrefHeight(18);
 
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        Region leftSpacer = new Region();
+        Region rightSpacer = new Region();
+        HBox.setHgrow(leftSpacer, Priority.ALWAYS);
+        HBox.setHgrow(rightSpacer, Priority.ALWAYS);
 
         HBox statusBar = new HBox(
                 12,
                 statusLabel,
-                spacer,
+                leftSpacer,
+                pageNavigation,
+                rightSpacer,
                 documentSizeLabel,
                 statusSeparator,
                 zoomLabel,

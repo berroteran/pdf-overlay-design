@@ -328,13 +328,28 @@
     -fx-border-radius: 6;
 }
 
+.toolbar-button-compact {
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-padding: 3 8 3 8;
+    -fx-min-height: 26px;
+    -fx-background-color: linear-gradient(to bottom, -button-bg-top, -button-bg-bottom);
+    -fx-border-color: -button-border;
+    -fx-border-width: 1;
+    -fx-text-fill: -button-text;
+    -fx-background-radius: 5;
+    -fx-border-radius: 5;
+}
+
 .toolbar-button-large:hover,
+.toolbar-button-compact:hover,
 .action-button-medium:hover {
     -fx-background-color: linear-gradient(to bottom, derive(-button-bg-top, 4%), derive(-button-bg-bottom, 4%));
 }
 
 .toolbar-button-large:armed,
 .toolbar-button-large:selected,
+.toolbar-button-compact:armed,
 .action-button-medium:armed {
     -fx-background-color: linear-gradient(to bottom, derive(-button-bg-bottom, 8%), derive(-button-bg-bottom, -2%));
 }
@@ -375,6 +390,16 @@
 
 .status-meta {
     -fx-text-fill: -text-secondary;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+}
+
+.status-page-navigation {
+    -fx-alignment: center;
+}
+
+.status-page-label {
+    -fx-text-fill: -text-primary;
     -fx-font-size: 12px;
     -fx-font-weight: 600;
 }

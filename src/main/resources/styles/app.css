@@ -79,6 +79,12 @@
     -fx-font-weight: 600;
 }
 
+.ruler-corner {
+    -fx-background-color: linear-gradient(to bottom right, #edf3f9, #dfe8f1);
+    -fx-border-color: #c6d1dc;
+    -fx-border-width: 0 1 1 0;
+}
+
 .overlay-node {
     -fx-cursor: move;
 }

@@ -16,6 +16,8 @@ import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.control.Alert;
@@ -56,6 +58,9 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.RowConstraints;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.scene.text.TextAlignment;
 import javafx.scene.web.WebView;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -85,6 +90,9 @@ public final class MainViewController {
 
     private static final double DEFAULT_CANVAS_WIDTH = 900;
     private static final double DEFAULT_CANVAS_HEIGHT = 1200;
+    private static final double RULER_SIZE = 26.0d;
+    private static final double GRID_MAJOR_CM = 1.0d;
+    private static final double GRID_MINOR_CM = 0.5d;
     private static final float PREVIEW_DPI = 180.0f;
     private static final int DEFAULT_TABLE_COLUMNS = 4;
     private static final int MAX_TABLE_COLUMNS = 12;
@@ -109,9 +117,14 @@ public final class MainViewController {
 
     private final BorderPane root;
     private final ImageView pageImageView;
+    private final Canvas gridCanvas;
     private final Pane overlayPane;
     private final StackPane pageStack;
     private final ScrollPane canvasScrollPane;
+    private final GridPane canvasWorkspacePane;
+    private final Canvas topRulerCanvas;
+    private final Canvas leftRulerCanvas;
+    private final Region rulerCorner;
     private final TabPane workspaceTabPane;
     private final Tab graphicTab;
     private final Tab htmlSourceTab;
@@ -128,6 +141,7 @@ public final class MainViewController {
     private final Button applyElementIdButton;
     private final TextField selectedElementTextField;
     private final CheckBox enableStatusWatermarkCheck;
+    private final CheckBox showMeasurementGridCheck;
     private final ComboBox<DocumentStatus> documentStatusCombo;
     private final TextField tableWidthPercentField;
     private final TextField tableColumnWidthsField;
@@ -174,9 +188,14 @@ public final class MainViewController {
 
         this.root = new BorderPane();
         this.pageImageView = new ImageView();
+        this.gridCanvas = new Canvas(DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT);
         this.overlayPane = new Pane();
         this.pageStack = new StackPane();
         this.canvasScrollPane = new ScrollPane();
+        this.canvasWorkspacePane = new GridPane();
+        this.topRulerCanvas = new Canvas();
+        this.leftRulerCanvas = new Canvas();
+        this.rulerCorner = new Region();
         this.workspaceTabPane = new TabPane();
         this.graphicTab = new Tab("Graphic Mode");
         this.htmlSourceTab = new Tab("HTML Source");
@@ -193,6 +212,7 @@ public final class MainViewController {
         this.applyElementIdButton = new Button("Apply ID");
         this.selectedElementTextField = new TextField();
         this.enableStatusWatermarkCheck = new CheckBox("Enable status watermark");
+        this.showMeasurementGridCheck = new CheckBox("Show grid (cm)");
         this.documentStatusCombo = new ComboBox<>();
         this.tableWidthPercentField = new TextField();
         this.tableColumnWidthsField = new TextField();
@@ -247,13 +267,15 @@ public final class MainViewController {
     private void configureCanvas() {
         pageImageView.setPreserveRatio(false);
         pageImageView.setSmooth(true);
+        gridCanvas.setMouseTransparent(true);
 
         overlayPane.setManaged(true);
         overlayPane.setPickOnBounds(true);
         overlayPane.setOnMouseClicked(this::handleCanvasClick);
 
-        pageStack.getChildren().addAll(pageImageView, overlayPane);
+        pageStack.getChildren().addAll(pageImageView, gridCanvas, overlayPane);
         StackPane.setAlignment(pageImageView, Pos.TOP_LEFT);
+        StackPane.setAlignment(gridCanvas, Pos.TOP_LEFT);
         StackPane.setAlignment(overlayPane, Pos.TOP_LEFT);
         overlayPane.toFront();
         pageStack.setPrefSize(DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT);
@@ -264,6 +286,23 @@ public final class MainViewController {
         canvasScrollPane.setPannable(true);
         canvasScrollPane.setFitToHeight(false);
         canvasScrollPane.setFitToWidth(false);
+
+        topRulerCanvas.setHeight(RULER_SIZE);
+        leftRulerCanvas.setWidth(RULER_SIZE);
+        rulerCorner.getStyleClass().add("ruler-corner");
+
+        ColumnConstraints rulerColumn = new ColumnConstraints(RULER_SIZE);
+        ColumnConstraints contentColumn = new ColumnConstraints();
+        contentColumn.setHgrow(Priority.ALWAYS);
+        RowConstraints rulerRow = new RowConstraints(RULER_SIZE);
+        RowConstraints contentRow = new RowConstraints();
+        contentRow.setVgrow(Priority.ALWAYS);
+        canvasWorkspacePane.getColumnConstraints().setAll(rulerColumn, contentColumn);
+        canvasWorkspacePane.getRowConstraints().setAll(rulerRow, contentRow);
+        canvasWorkspacePane.add(rulerCorner, 0, 0);
+        canvasWorkspacePane.add(topRulerCanvas, 1, 0);
+        canvasWorkspacePane.add(leftRulerCanvas, 0, 1);
+        canvasWorkspacePane.add(canvasScrollPane, 1, 1);
     }
 
     private void configureActions() {
@@ -311,6 +350,7 @@ public final class MainViewController {
             pageStack.setScaleX(scale);
             pageStack.setScaleY(scale);
             zoomValueLabel.setText(formatZoomPercentage(percent));
+            redrawMeasurementGuides();
         });
 
         exportDpiCombo.getItems().addAll(150, 200, 300, 600);
@@ -319,6 +359,8 @@ public final class MainViewController {
         documentStatusCombo.setValue(DocumentStatus.DRAFT);
         documentStatusCombo.setDisable(true);
         enableStatusWatermarkCheck.setSelected(false);
+        showMeasurementGridCheck.setSelected(true);
+        showMeasurementGridCheck.selectedProperty().addListener((obs, oldValue, newValue) -> redrawMeasurementGuides());
         enableStatusWatermarkCheck.selectedProperty().addListener((obs, oldValue, newValue) -> {
             documentStatusCombo.setDisable(!newValue);
             if (currentProject == null) {
@@ -383,11 +425,14 @@ public final class MainViewController {
         });
 
         canvasScrollPane.addEventFilter(ScrollEvent.SCROLL, this::handleZoomScroll);
+        canvasScrollPane.hvalueProperty().addListener((obs, oldValue, newValue) -> redrawMeasurementGuides());
+        canvasScrollPane.vvalueProperty().addListener((obs, oldValue, newValue) -> redrawMeasurementGuides());
+        canvasScrollPane.viewportBoundsProperty().addListener((obs, oldValue, newValue) -> redrawMeasurementGuides());
     }
 
     private Node buildWorkspacePane() {
         graphicTab.setClosable(false);
-        graphicTab.setContent(canvasScrollPane);
+        graphicTab.setContent(canvasWorkspacePane);
 
         Label sourceBlockLabel = new Label("Code block");
         sourceBlockLabel.getStyleClass().add("status-meta");
@@ -580,6 +625,7 @@ public final class MainViewController {
                 inspectorTitle,
                 new Label("Document status"),
                 enableStatusWatermarkCheck,
+                showMeasurementGridCheck,
                 documentStatusCombo,
                 new Separator(),
                 new Label("Type"),
@@ -735,6 +781,8 @@ public final class MainViewController {
             pageImageView.setImage(image);
             pageImageView.setFitWidth(currentPagePixelWidth);
             pageImageView.setFitHeight(currentPagePixelHeight);
+            gridCanvas.setWidth(currentPagePixelWidth);
+            gridCanvas.setHeight(currentPagePixelHeight);
 
             overlayPane.setPrefSize(currentPagePixelWidth, currentPagePixelHeight);
             overlayPane.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
@@ -747,6 +795,7 @@ public final class MainViewController {
             pageStack.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
 
             renderOverlayElements();
+            redrawMeasurementGuides();
             updatePageLabel();
             updateButtonsState();
             if (autoFitZoomOnNextLoad) {
@@ -773,6 +822,186 @@ public final class MainViewController {
             elementNodes.put(element.getId(), node);
             overlayPane.getChildren().add(node);
         }
+    }
+
+    private void redrawMeasurementGuides() {
+        drawGridOverlay();
+        drawRulers();
+    }
+
+    private void drawGridOverlay() {
+        GraphicsContext graphics = gridCanvas.getGraphicsContext2D();
+        graphics.clearRect(0, 0, gridCanvas.getWidth(), gridCanvas.getHeight());
+
+        boolean showGrid = showMeasurementGridCheck.isSelected() && currentProject != null;
+        gridCanvas.setVisible(showGrid);
+        if (!showGrid) {
+            return;
+        }
+
+        double pixelsPerCmX = getPixelsPerCentimeterX();
+        double pixelsPerCmY = getPixelsPerCentimeterY();
+        if (pixelsPerCmX <= 0.0d || pixelsPerCmY <= 0.0d) {
+            return;
+        }
+
+        drawGridLines(graphics, gridCanvas.getWidth(), pixelsPerCmX, true);
+        drawGridLines(graphics, gridCanvas.getHeight(), pixelsPerCmY, false);
+    }
+
+    private void drawGridLines(GraphicsContext graphics, double length, double pixelsPerCm, boolean verticalLines) {
+        double minorStepPixels = pixelsPerCm * GRID_MINOR_CM;
+        double majorStepPixels = pixelsPerCm * GRID_MAJOR_CM;
+        double epsilon = 0.01d;
+
+        for (double position = 0.0d; position <= length + epsilon; position += minorStepPixels) {
+            boolean majorLine = isMajorMeasurement(position, majorStepPixels);
+            graphics.setStroke(majorLine ? Color.rgb(42, 91, 135, 0.45) : Color.rgb(42, 91, 135, 0.18));
+            graphics.setLineWidth(majorLine ? 1.0d : 0.6d);
+            if (verticalLines) {
+                graphics.strokeLine(position, 0, position, gridCanvas.getHeight());
+            } else {
+                graphics.strokeLine(0, position, gridCanvas.getWidth(), position);
+            }
+        }
+    }
+
+    private void drawRulers() {
+        drawHorizontalRuler();
+        drawVerticalRuler();
+    }
+
+    private void drawHorizontalRuler() {
+        double width = Math.max(0.0d, canvasScrollPane.getViewportBounds().getWidth());
+        topRulerCanvas.setWidth(width);
+        topRulerCanvas.setVisible(showMeasurementGridCheck.isSelected() && currentProject != null);
+
+        GraphicsContext graphics = topRulerCanvas.getGraphicsContext2D();
+        graphics.setFill(Color.rgb(245, 248, 252));
+        graphics.fillRect(0, 0, width, RULER_SIZE);
+        graphics.setStroke(Color.rgb(175, 188, 201));
+        graphics.strokeRect(0, 0, Math.max(0.0d, width - 0.5d), Math.max(0.0d, RULER_SIZE - 0.5d));
+
+        if (!topRulerCanvas.isVisible()) {
+            return;
+        }
+
+        double scale = pageStack.getScaleX();
+        double pixelsPerCm = getPixelsPerCentimeterX() * scale;
+        if (pixelsPerCm <= 0.0d) {
+            return;
+        }
+
+        double contentWidth = pageStack.getBoundsInParent().getWidth();
+        double viewportWidth = canvasScrollPane.getViewportBounds().getWidth();
+        double scrollOffset = resolveScrollOffset(canvasScrollPane.getHvalue(), contentWidth, viewportWidth);
+        drawRulerTicks(graphics, width, pixelsPerCm, scrollOffset, true);
+    }
+
+    private void drawVerticalRuler() {
+        double height = Math.max(0.0d, canvasScrollPane.getViewportBounds().getHeight());
+        leftRulerCanvas.setHeight(height);
+        leftRulerCanvas.setVisible(showMeasurementGridCheck.isSelected() && currentProject != null);
+
+        GraphicsContext graphics = leftRulerCanvas.getGraphicsContext2D();
+        graphics.setFill(Color.rgb(245, 248, 252));
+        graphics.fillRect(0, 0, RULER_SIZE, height);
+        graphics.setStroke(Color.rgb(175, 188, 201));
+        graphics.strokeRect(0, 0, Math.max(0.0d, RULER_SIZE - 0.5d), Math.max(0.0d, height - 0.5d));
+
+        if (!leftRulerCanvas.isVisible()) {
+            return;
+        }
+
+        double scale = pageStack.getScaleY();
+        double pixelsPerCm = getPixelsPerCentimeterY() * scale;
+        if (pixelsPerCm <= 0.0d) {
+            return;
+        }
+
+        double contentHeight = pageStack.getBoundsInParent().getHeight();
+        double viewportHeight = canvasScrollPane.getViewportBounds().getHeight();
+        double scrollOffset = resolveScrollOffset(canvasScrollPane.getVvalue(), contentHeight, viewportHeight);
+        drawRulerTicks(graphics, height, pixelsPerCm, scrollOffset, false);
+    }
+
+    private void drawRulerTicks(GraphicsContext graphics, double rulerLength, double pixelsPerCm,
+                                double scrollOffset, boolean horizontal) {
+        double minorStep = pixelsPerCm * GRID_MINOR_CM;
+        double majorStep = pixelsPerCm * GRID_MAJOR_CM;
+        double startMeasurement = Math.max(0.0d, Math.floor(scrollOffset / minorStep) * GRID_MINOR_CM);
+        double endMeasurement = (scrollOffset + rulerLength) / pixelsPerCm;
+
+        graphics.setFont(Font.font("Segoe UI", 10));
+        graphics.setFill(Color.rgb(36, 60, 82));
+        graphics.setStroke(Color.rgb(63, 92, 122));
+        graphics.setTextAlign(horizontal ? TextAlignment.CENTER : TextAlignment.LEFT);
+
+        for (double measurementCm = startMeasurement; measurementCm <= endMeasurement + 0.01d;
+             measurementCm += GRID_MINOR_CM) {
+            double pixelPosition = (measurementCm * pixelsPerCm) - scrollOffset;
+            boolean majorTick = isMajorMeasurement(measurementCm, GRID_MAJOR_CM);
+            double tickLength = majorTick ? RULER_SIZE - 6.0d : RULER_SIZE - 14.0d;
+
+            if (horizontal) {
+                graphics.strokeLine(pixelPosition, RULER_SIZE, pixelPosition, tickLength);
+                if (majorTick) {
+                    graphics.fillText(formatMeasurementLabel(measurementCm), pixelPosition, 10.5d);
+                }
+            } else {
+                graphics.strokeLine(RULER_SIZE, pixelPosition, tickLength, pixelPosition);
+                if (majorTick) {
+                    graphics.save();
+                    graphics.translate(8.0d, pixelPosition + 9.0d);
+                    graphics.rotate(-90.0d);
+                    graphics.fillText(formatMeasurementLabel(measurementCm), 0, 0);
+                    graphics.restore();
+                }
+            }
+        }
+    }
+
+    private double getPixelsPerCentimeterX() {
+        PdfPageMetadata pageMetadata = getCurrentPageMetadata();
+        if (pageMetadata == null || pageMetadata.widthInches() <= 0.0d) {
+            return 0.0d;
+        }
+        return currentPagePixelWidth / (pageMetadata.widthInches() * 2.54d);
+    }
+
+    private double getPixelsPerCentimeterY() {
+        PdfPageMetadata pageMetadata = getCurrentPageMetadata();
+        if (pageMetadata == null || pageMetadata.heightInches() <= 0.0d) {
+            return 0.0d;
+        }
+        return currentPagePixelHeight / (pageMetadata.heightInches() * 2.54d);
+    }
+
+    private PdfPageMetadata getCurrentPageMetadata() {
+        if (currentProject == null || currentPageIndex < 0 || currentPageIndex >= currentProject.getMetadata().pageCount()) {
+            return null;
+        }
+        return currentProject.getMetadata().getPages().get(currentPageIndex);
+    }
+
+    private double resolveScrollOffset(double scrollValue, double contentLength, double viewportLength) {
+        double scrollableRange = Math.max(0.0d, contentLength - viewportLength);
+        return scrollValue * scrollableRange;
+    }
+
+    private boolean isMajorMeasurement(double position, double majorStep) {
+        if (majorStep <= 0.0d) {
+            return false;
+        }
+        double roundedSteps = Math.rint(position / majorStep);
+        return Math.abs(position - (roundedSteps * majorStep)) < 0.01d;
+    }
+
+    private String formatMeasurementLabel(double valueCm) {
+        if (Math.abs(valueCm - Math.rint(valueCm)) < 0.01d) {
+            return Integer.toString((int) Math.round(valueCm));
+        }
+        return String.format(Locale.US, "%.1f", valueCm);
     }
 
     private Region createVisualNode(OverlayElement element) {

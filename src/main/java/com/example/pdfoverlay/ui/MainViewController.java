@@ -84,6 +84,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.prefs.Preferences;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -103,6 +104,8 @@ public final class MainViewController {
     private static final float PREVIEW_DPI = 180.0f;
     private static final int DEFAULT_TABLE_COLUMNS = 4;
     private static final int MAX_TABLE_COLUMNS = 12;
+    private static final int MAX_RECENT_FILES = 10;
+    private static final String RECENT_FILES_PREFERENCE_KEY = "recentFiles";
     private static final double ZOOM_STEP_PERCENT = 10.0d;
     private static final int AUTO_FIT_MAX_ATTEMPTS = 16;
     private static final double RESIZE_HANDLE_SIZE = 8.0d;
@@ -169,6 +172,8 @@ public final class MainViewController {
     private final Button previousPageButton;
     private final Button nextPageButton;
     private final Button deleteSelectedButton;
+    private final MenuItem newProjectMenuItem;
+    private final Menu recentFilesMenu;
     private final Label measurementValueLabel;
     private final Region measurementRectangle;
     private final Label measurementOverlayLabel;
@@ -176,6 +181,7 @@ public final class MainViewController {
     private final Map<String, Region> elementNodes;
     private final Map<ResizeHandlePosition, Region> resizeHandles;
     private final Deque<DeletedElementSnapshot> deletedElementsHistory;
+    private final Preferences preferences;
 
     private EditorTool activeTool;
     private OverlayProject currentProject;
@@ -250,6 +256,8 @@ public final class MainViewController {
         this.previousPageButton = new Button("< Prev");
         this.nextPageButton = new Button("Next >");
         this.deleteSelectedButton = new Button("Delete selected");
+        this.newProjectMenuItem = new MenuItem("New Project");
+        this.recentFilesMenu = new Menu("Recent Files");
         this.measurementValueLabel = new Label("W x H: -");
         this.measurementRectangle = new Region();
         this.measurementOverlayLabel = new Label();
@@ -257,6 +265,7 @@ public final class MainViewController {
         this.elementNodes = new HashMap<>();
         this.resizeHandles = new EnumMap<>(ResizeHandlePosition.class);
         this.deletedElementsHistory = new ArrayDeque<>();
+        this.preferences = Preferences.userNodeForPackage(MainViewController.class);
         this.selectedElementIdField.setDisable(true);
         this.applyElementIdButton.setDisable(true);
 
@@ -677,6 +686,9 @@ public final class MainViewController {
     }
 
     private MenuBar buildMenuBar() {
+        newProjectMenuItem.setOnAction(event -> newProject());
+        newProjectMenuItem.setGraphic(ButtonIconFactory.newProjectIcon());
+
         MenuItem openPdfMenuItem = new MenuItem("Open PDF...");
         openPdfMenuItem.setOnAction(event -> openPdfFile());
         openPdfMenuItem.setGraphic(ButtonIconFactory.openPdfIcon());
@@ -717,9 +729,13 @@ public final class MainViewController {
         exitMenuItem.setOnAction(event -> requestApplicationClose());
         exitMenuItem.setGraphic(ButtonIconFactory.exitIcon());
 
+        recentFilesMenu.setGraphic(ButtonIconFactory.recentFilesIcon());
+        recentFilesMenu.setOnShowing(event -> refreshRecentFilesMenu());
+        refreshRecentFilesMenu();
+
         Menu openMenu = new Menu("Open");
         openMenu.setGraphic(ButtonIconFactory.fileMenuIcon());
-        openMenu.getItems().addAll(openPdfMenuItem, openProjectMenuItem);
+        openMenu.getItems().addAll(openPdfMenuItem, openProjectMenuItem, recentFilesMenu);
 
         Menu printMenu = new Menu("Print");
         printMenu.setGraphic(ButtonIconFactory.printHtmlIcon());
@@ -728,6 +744,8 @@ public final class MainViewController {
         Menu fileMenu = new Menu("File");
         fileMenu.setGraphic(ButtonIconFactory.fileMenuIcon());
         fileMenu.getItems().addAll(
+                newProjectMenuItem,
+                new SeparatorMenuItem(),
                 openMenu,
                 new SeparatorMenuItem(),
                 saveProjectMenuItem,
@@ -961,6 +979,10 @@ public final class MainViewController {
     }
 
     private void openPdfFile() {
+        if (!confirmCloseApplication()) {
+            return;
+        }
+
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Select PDF document");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF files", "*.pdf"));
@@ -970,9 +992,12 @@ public final class MainViewController {
             return;
         }
 
+        openPdfDocument(selectedFile.toPath());
+    }
+
+    private void openPdfDocument(Path pdfPath) {
         try {
             suppressChangeTracking = true;
-            Path pdfPath = selectedFile.toPath();
             PdfDocumentMetadata metadata = pdfService.loadMetadata(pdfPath);
             currentProject = new OverlayProject(pdfPath, metadata);
             autoFitZoomOnNextLoad = true;
@@ -983,10 +1008,12 @@ public final class MainViewController {
             deletedElementsHistory.clear();
             clearSelection();
             loadCurrentPage();
+            addRecentFile(pdfPath);
             statusLabel.setText("Loaded PDF: " + pdfPath.getFileName());
             LOGGER.log(Level.INFO, "PDF opened: {0}", pdfPath);
         } catch (Exception ex) {
             LOGGER.log(Level.SEVERE, "Unable to open PDF", ex);
+            removeRecentFile(pdfPath);
             showError("Cannot open PDF", ex.getMessage());
         } finally {
             updateButtonsState();
@@ -995,6 +1022,10 @@ public final class MainViewController {
     }
 
     private void openHtmlFile() {
+        if (!confirmCloseApplication()) {
+            return;
+        }
+
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Open HTML overlay");
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("HTML files", "*.html", "*.htm"));
@@ -1004,9 +1035,38 @@ public final class MainViewController {
             return;
         }
 
+        openProjectHtml(selectedFile.toPath());
+    }
+
+    private void openRecentFile(Path filePath) {
+        if (!Files.exists(filePath) || !Files.isRegularFile(filePath)) {
+            removeRecentFile(filePath);
+            refreshRecentFilesMenu();
+            showError("Recent file not found", filePath.toString());
+            return;
+        }
+        if (!confirmCloseApplication()) {
+            return;
+        }
+
+        String fileName = filePath.getFileName().toString().toLowerCase(Locale.US);
+        if (fileName.endsWith(".pdf")) {
+            openPdfDocument(filePath);
+            return;
+        }
+        if (fileName.endsWith(".html") || fileName.endsWith(".htm")) {
+            openProjectHtml(filePath);
+            return;
+        }
+
+        removeRecentFile(filePath);
+        refreshRecentFilesMenu();
+        showError("Unsupported recent file", filePath.toString());
+    }
+
+    private void openProjectHtml(Path htmlPath) {
         try {
             suppressChangeTracking = true;
-            Path htmlPath = selectedFile.toPath();
             OverlayProject loadedProject = htmlExportService.loadProjectFromHtml(htmlPath);
             currentProject = loadedProject;
             normalizeElementIdsInProject();
@@ -1018,15 +1078,180 @@ public final class MainViewController {
             deletedElementsHistory.clear();
             clearSelection();
             loadCurrentPage();
+            addRecentFile(htmlPath);
             statusLabel.setText("Loaded HTML: " + htmlPath.getFileName());
             LOGGER.log(Level.INFO, "HTML project opened: {0}", htmlPath);
         } catch (Exception ex) {
             LOGGER.log(Level.SEVERE, "Unable to open HTML project", ex);
+            removeRecentFile(htmlPath);
             showError("Cannot open HTML", ex.getMessage());
         } finally {
             updateButtonsState();
             suppressChangeTracking = false;
         }
+    }
+
+    private void newProject() {
+        if (currentProject == null) {
+            resetProjectState("Ready for a new document");
+            return;
+        }
+        if (currentHtmlPath == null || hasUnsavedChanges) {
+            statusLabel.setText("Save the current project before starting a new one");
+            return;
+        }
+        if (!confirmCloseApplication()) {
+            return;
+        }
+        resetProjectState("Current project closed. Open a PDF or project HTML.");
+    }
+
+    private void resetProjectState(String message) {
+        suppressChangeTracking = true;
+        try {
+            currentProject = null;
+            currentHtmlPath = null;
+            currentPageIndex = 0;
+            hasUnsavedChanges = false;
+            deletedElementsHistory.clear();
+            clearSelection();
+            hideMeasurementOverlay();
+            elementNodes.clear();
+            overlayPane.getChildren().clear();
+            installResizeHandles();
+            installMeasurementOverlay();
+            pageImageView.setImage(null);
+            gridCanvas.getGraphicsContext2D().clearRect(0, 0, gridCanvas.getWidth(), gridCanvas.getHeight());
+            topRulerCanvas.getGraphicsContext2D().clearRect(0, 0, topRulerCanvas.getWidth(), topRulerCanvas.getHeight());
+            leftRulerCanvas.getGraphicsContext2D().clearRect(0, 0, leftRulerCanvas.getWidth(), leftRulerCanvas.getHeight());
+            currentPagePixelWidth = DEFAULT_CANVAS_WIDTH;
+            currentPagePixelHeight = DEFAULT_CANVAS_HEIGHT;
+            overlayPane.setPrefSize(currentPagePixelWidth, currentPagePixelHeight);
+            overlayPane.resize(currentPagePixelWidth, currentPagePixelHeight);
+            pageStack.setPrefSize(currentPagePixelWidth, currentPagePixelHeight);
+            pageLabel.setText("Page -/-");
+            documentSizeLabel.setText("Document size: -");
+            latestGeneratedHtmlSource = "<!-- Open a PDF or HTML project first -->";
+            updateHtmlSourceView();
+            updateButtonsState();
+            statusLabel.setText(message);
+        } finally {
+            suppressChangeTracking = false;
+        }
+    }
+
+    private void refreshRecentFilesMenu() {
+        recentFilesMenu.getItems().clear();
+        List<Path> recentFiles = loadRecentFiles();
+        if (recentFiles.isEmpty()) {
+            MenuItem emptyItem = new MenuItem("No recent files");
+            emptyItem.setDisable(true);
+            recentFilesMenu.getItems().add(emptyItem);
+            recentFilesMenu.setDisable(true);
+            return;
+        }
+
+        recentFilesMenu.setDisable(false);
+        for (Path filePath : recentFiles) {
+            MenuItem item = new MenuItem(formatRecentFileMenuText(filePath));
+            item.setGraphic(createRecentFileIcon(filePath));
+            item.setOnAction(event -> openRecentFile(filePath));
+            item.setMnemonicParsing(false);
+            item.setUserData(filePath);
+            recentFilesMenu.getItems().add(item);
+        }
+        recentFilesMenu.getItems().add(new SeparatorMenuItem());
+        MenuItem clearItem = new MenuItem("Clear Recent Files");
+        clearItem.setGraphic(ButtonIconFactory.deleteIcon());
+        clearItem.setOnAction(event -> {
+            saveRecentFiles(List.of());
+            refreshRecentFilesMenu();
+        });
+        recentFilesMenu.getItems().add(clearItem);
+    }
+
+    private Node createRecentFileIcon(Path filePath) {
+        String fileName = filePath.getFileName().toString().toLowerCase(Locale.US);
+        if (fileName.endsWith(".pdf")) {
+            return ButtonIconFactory.openPdfIcon();
+        }
+        return ButtonIconFactory.openHtmlIcon();
+    }
+
+    private String formatRecentFileMenuText(Path filePath) {
+        Path parent = filePath.getParent();
+        if (parent == null) {
+            return filePath.getFileName().toString();
+        }
+        return filePath.getFileName() + " - " + parent;
+    }
+
+    private void addRecentFile(Path filePath) {
+        Path normalizedPath = normalizeRecentFilePath(filePath);
+        List<Path> recentFiles = new ArrayList<>();
+        recentFiles.add(normalizedPath);
+        for (Path existingPath : loadRecentFiles()) {
+            if (!normalizeRecentFilePath(existingPath).equals(normalizedPath)) {
+                recentFiles.add(existingPath);
+            }
+            if (recentFiles.size() >= MAX_RECENT_FILES) {
+                break;
+            }
+        }
+        saveRecentFiles(recentFiles);
+        refreshRecentFilesMenu();
+    }
+
+    private void removeRecentFile(Path filePath) {
+        Path normalizedPath = normalizeRecentFilePath(filePath);
+        List<Path> recentFiles = loadRecentFiles().stream()
+                .filter(existingPath -> !normalizeRecentFilePath(existingPath).equals(normalizedPath))
+                .toList();
+        saveRecentFiles(recentFiles);
+    }
+
+    private List<Path> loadRecentFiles() {
+        String rawValue = preferences.get(RECENT_FILES_PREFERENCE_KEY, "");
+        if (rawValue.isBlank()) {
+            return List.of();
+        }
+
+        List<Path> recentFiles = new ArrayList<>();
+        for (String token : rawValue.split("\\R")) {
+            String pathText = token.strip();
+            if (pathText.isBlank()) {
+                continue;
+            }
+            Path filePath = Path.of(pathText);
+            if (Files.exists(filePath) && Files.isRegularFile(filePath) && isSupportedRecentFile(filePath)) {
+                recentFiles.add(normalizeRecentFilePath(filePath));
+            }
+            if (recentFiles.size() >= MAX_RECENT_FILES) {
+                break;
+            }
+        }
+        saveRecentFiles(recentFiles);
+        return recentFiles;
+    }
+
+    private void saveRecentFiles(List<Path> recentFiles) {
+        String serialized = recentFiles.stream()
+                .map(this::normalizeRecentFilePath)
+                .distinct()
+                .limit(MAX_RECENT_FILES)
+                .map(Path::toString)
+                .reduce((left, right) -> left + System.lineSeparator() + right)
+                .orElse("");
+        preferences.put(RECENT_FILES_PREFERENCE_KEY, serialized);
+    }
+
+    private boolean isSupportedRecentFile(Path filePath) {
+        String fileName = filePath.getFileName().toString().toLowerCase(Locale.US);
+        return fileName.endsWith(".pdf") || fileName.endsWith(".html") || fileName.endsWith(".htm");
+    }
+
+    private Path normalizeRecentFilePath(Path filePath) {
+        return filePath.toAbsolutePath().normalize();
     }
 
     private void loadCurrentPage() {
@@ -2432,6 +2657,8 @@ public final class MainViewController {
 
     private void updateButtonsState() {
         boolean hasProject = currentProject != null;
+        boolean canStartNewProject = hasProject && currentHtmlPath != null && !hasUnsavedChanges;
+        newProjectMenuItem.setDisable(!canStartNewProject);
         printHtmlButton.setDisable(!hasProject);
         printHtmlOnlyButton.setDisable(!hasProject);
         printPdfButton.setDisable(!hasProject);
@@ -2492,6 +2719,8 @@ public final class MainViewController {
             );
             currentHtmlPath = htmlPath;
             hasUnsavedChanges = false;
+            addRecentFile(htmlPath);
+            updateButtonsState();
             statusLabel.setText("Project saved: " + htmlPath.getFileName());
             if (showConfirmation) {
                 Alert info = new Alert(Alert.AlertType.INFORMATION, "Project saved at:\n" + htmlPath, ButtonType.OK);
@@ -2556,6 +2785,7 @@ public final class MainViewController {
             return;
         }
         hasUnsavedChanges = true;
+        updateButtonsState();
     }
 
     private void exportErpNextFragment() {

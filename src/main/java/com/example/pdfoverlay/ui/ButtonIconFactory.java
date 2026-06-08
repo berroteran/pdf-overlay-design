@@ -97,6 +97,38 @@ public final class ButtonIconFactory {
     }
 
     /**
+     * @return ícono para iniciar un proyecto nuevo.
+     */
+    public static Node newProjectIcon() {
+        Group icon = createDocumentBase();
+        Line horizontal = createLine(4.0, 7.0, 10.0, 7.0, ACCENT_GREEN, 1.6);
+        Line vertical = createLine(7.0, 4.0, 7.0, 10.0, ACCENT_GREEN, 1.6);
+        icon.getChildren().addAll(horizontal, vertical);
+        return wrap(icon);
+    }
+
+    /**
+     * @return ícono para archivos recientes.
+     */
+    public static Node recentFilesIcon() {
+        Rectangle page = new Rectangle(3.0, 1.8, 8.2, 10.4);
+        page.setFill(PAPER_FILL);
+        page.setStroke(STROKE);
+        page.setStrokeWidth(1.0);
+        page.setArcWidth(1.2);
+        page.setArcHeight(1.2);
+
+        Line clockHour = createLine(7.0, 5.0, 7.0, 7.2, ACCENT_BLUE, 1.1);
+        Line clockMinute = createLine(7.0, 7.2, 9.0, 7.2, ACCENT_BLUE, 1.1);
+        Circle clock = new Circle(7.0, 7.2, 3.2);
+        clock.setFill(Color.TRANSPARENT);
+        clock.setStroke(ACCENT_BLUE);
+        clock.setStrokeWidth(1.0);
+
+        return wrap(new Group(page, clock, clockHour, clockMinute));
+    }
+
+    /**
      * @return ícono para imprimir HTML.
      */
     public static Node printHtmlIcon() {

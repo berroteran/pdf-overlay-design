@@ -9,6 +9,18 @@ Usar `File > Open > Open Project HTML...` para continuar editando un archivo
 guardado por la aplicación. No se soporta abrir HTML externo sin metadata
 interna del proyecto.
 
+`File > Open > Recent Files` lista hasta 10 PDF o proyectos HTML recientes.
+Las entradas inexistentes se limpian automáticamente del historial.
+
+## Nuevo Proyecto
+
+`File > New Project` cierra el proyecto actual y limpia la interfaz para abrir
+otro documento.
+
+La acción se habilita solo cuando el proyecto actual ya está guardado en disco
+y no tiene cambios pendientes. Si hay cambios sin guardar, primero debe usarse
+`Save Project`.
+
 ## Herramientas
 
 | Herramienta | Uso |

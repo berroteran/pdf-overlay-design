@@ -20,6 +20,7 @@ flowchart TD
     D -->|No| F[Save Project As]
     F --> G[Elegir ruta]
     G --> E
+    E --> O[New Project habilitado\nsi no hay cambios pendientes]
 
     B --> H[Export ERPNext]
     H --> I[Mostrar Export options]
@@ -54,6 +55,25 @@ Características:
 - Misma salida editable que `Save Project`.
 - Cambia `currentHtmlPath` al nuevo archivo.
 - Puede usarse para renombrar o duplicar proyecto.
+
+## New Project
+
+`New Project` cierra el proyecto actual y deja el editor sin documento cargado.
+Solo se habilita cuando el proyecto tiene archivo guardado y no hay cambios
+pendientes.
+
+No crea un archivo nuevo por sí mismo. El siguiente paso normal es abrir otro
+PDF o un HTML de proyecto desde `Open` o `Recent Files`.
+
+## Recent Files
+
+El historial guarda hasta 10 rutas persistentes entre sesiones.
+
+- Incluye PDF abiertos.
+- Incluye HTML de proyecto abiertos o guardados.
+- Elimina rutas inexistentes al refrescar el menú.
+- Abrir un reciente aplica la misma protección de cambios pendientes que
+  `Open PDF` y `Open Project HTML`.
 
 ## Export ERPNext
 

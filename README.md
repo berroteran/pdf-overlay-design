@@ -20,6 +20,8 @@ Resolver el diseño de formatos preimpresos con medidas físicas reales:
 - UI JavaFX con selector de temas: JavaFX, Swing/Java básicos y modo oscuro.
 - Reglas superior/lateral, grilla en centímetros y scrollbars con contraste.
 - Menú `File` con acciones de abrir, guardar, exportar, imprimir y salir.
+- `New Project` para cerrar un proyecto ya guardado y preparar otro trabajo.
+- Historial persistente de archivos recientes, máximo 10 entradas.
 - Toolbar superior para impresión, navegador y herramientas de edición.
 - Barra inferior compacta con navegación de páginas y zoom.
 - Vista `Graphic Mode` y vista `HTML Source`.
@@ -53,6 +55,13 @@ queda visible junto al botón.
 `Save Project` y `Save Project As...` guardan un archivo HTML editable por la
 aplicación. Ese archivo conserva metadata interna y, cuando corresponde, la
 imagen original embebida para poder continuar editando.
+
+`New Project` se habilita cuando el proyecto actual ya está guardado y no tiene
+cambios pendientes. Al ejecutarlo cierra el proyecto actual, limpia el editor y
+deja la aplicación lista para abrir otro documento.
+
+`Recent Files` mantiene hasta 10 archivos recientes entre PDF y HTML de
+proyecto.
 
 `Export ERPNext...` genera el HTML para usar en Print Format. Esta salida no
 incluye metadata editable ni imagen original. El export empieza directamente
@@ -108,6 +117,8 @@ flowchart TD
     E --> F[Save Project / Save Project As]
     E --> G[Export ERPNext]
     E --> H[Print PDF / Print HTML / HTML Only]
+    F --> K[New Project]
+    K --> A
     F --> I[Open Project HTML para continuar edición]
     G --> J[Copiar fragmento al Print Format]
 ```

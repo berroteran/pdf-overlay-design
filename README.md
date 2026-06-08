@@ -1,190 +1,85 @@
 # PDF Overlay Designer
 
-Editor desktop en **JavaFX + Maven** para diseñar overlays HTML alineados sobre PDFs preimpresos, con salida compatible con **ERPNext / Jinja**.
-
----
+Editor desktop en **JavaFX + Maven** para diseñar overlays HTML alineados
+sobre PDFs preimpresos, imprimirlos y exportarlos como fragmentos compatibles
+con **ERPNext / Frappe Print Format**.
 
 ## Propósito
 
-Resolver el diseño e impresión de formatos preimpresos con precisión:
+Resolver el diseño de formatos preimpresos con medidas físicas reales:
 
-1. Cargar PDF base (una o múltiples páginas).
-2. Diseñar capa overlay visual.
-3. Exportar HTML imprimible sobre un lienzo físico fijo.
-4. Reutilizar el HTML en plantillas ERPNext/Frappe.
+1. Cargar un PDF base de una o varias páginas.
+2. Diseñar controles HTML sobre la página.
+3. Medir espacios, tablas y columnas en milímetros.
+4. Guardar el proyecto para continuar edición.
+5. Exportar solo el HTML imprimible para ERPNext/Frappe.
+6. Imprimir PDF original, HTML con fondo o HTML estricto.
 
----
+## Estado Actual
 
-## Features actuales
+- UI JavaFX con selector de temas: JavaFX, Swing/Java básicos y modo oscuro.
+- Reglas superior/lateral, grilla en centímetros y scrollbars con contraste.
+- Menú `File` con acciones de abrir, guardar, exportar, imprimir y salir.
+- Toolbar superior para impresión, navegador y herramientas de edición.
+- Barra inferior compacta con navegación de páginas y zoom.
+- Vista `Graphic Mode` y vista `HTML Source`.
+- Guardado de proyecto separado de exportación.
+- Exportación ERPNext sin imagen original y sin metadata editable.
+- Impresión PDF/imagen original.
+- Impresión HTML con PDF embebido.
+- Impresión estricta de solo HTML.
+- Apertura del HTML estricto en navegador por defecto.
 
-- Carga de PDF multipágina (`Open PDF`).
-- Reapertura de diseño desde HTML generado por la app (`Open HTML`).
-- Editor visual tipo paint con herramientas:
-  - `Select`
-  - `Text`
-  - `Label`
-  - `Button`
-  - `Point`
-  - `Table`
-- IDs secuenciales por tipo, sin UUID:
-  - `textbox1`, `textbox2`...
-  - `label1`, `button1`, `marker1`, `table1`...
-- Texto por defecto al insertar: `tipo + contador`.
-- Si al insertar se hace click sobre otro control:
-  - se omite inserción
-  - cambia automáticamente a `Select`.
-- Selección visual clara del elemento activo.
-- Eliminación con `DEL` y deshacer borrado con `Ctrl/Cmd+Z`.
-- Panel derecho con inspector:
-  - edición de `ID`
-  - edición de texto
-  - configuración de tabla
-  - selector de estado documental.
-- Barra de estado:
-  - mensajes operativos
-  - tamaño de documento/página (`in` y `pt`)
-  - zoom y porcentaje.
-- Vista de trabajo por pestañas:
-  - `Graphic Mode`
-  - `HTML Source`.
-- Visor `HTML Source` mejorado:
-  - resaltado básico de sintaxis HTML/CSS/Jinja
-  - selector de bloques: `Full document`, `HEAD`, `STYLE`, `BODY`, `Metadata`.
-- Exportación HTML con opciones:
-  - incluir o no fondo PDF embebido
-  - exportar fuente
-  - exportar colores de tabla
-  - exportar bordes de tabla
-  - exportar bordes de campos de texto.
-- Impresión separada:
-  - `Print HTML`
-  - `Print PDF`.
-- Splash screen.
-- Icono de aplicación e iconos en botones.
+## Herramientas de Edición
 
----
+- `Select`: selecciona, mueve y redimensiona controles.
+- `Text`: inserta campos de texto.
+- `Label`: inserta etiquetas.
+- `Button`: inserta controles visuales tipo botón.
+- `Point`: inserta marcadores.
+- `Table`: inserta tablas HTML reales.
+- `Measure`: dibuja un rectángulo temporal para obtener `W x H` en mm.
 
-## Zoom y navegación
+Los controles seleccionados muestran handles estándar de resize. Al
+redimensionar una tabla, el ancho total y los anchos de columnas se actualizan
+en milímetros y se reflejan en el inspector.
 
-- Zoom por slider (`0%` a `300%`, con `100% = escala real 1.0`).
-- Al abrir PDF/HTML aplica **fit automático al viewport** (ancho/alto visible de la ventana).
-- Atajos de zoom:
-  - `Ctrl/Cmd + +` → zoom in
-  - `Ctrl/Cmd + -` → zoom out
-  - `Ctrl/Cmd + rueda mouse` → zoom in/out.
+La herramienta `Measure` no guarda datos en el proyecto. Su recuadro temporal
+se borra al hacer click posterior o presionar cualquier tecla; el último valor
+queda visible junto al botón.
 
----
+## Guardado, Exportación e Impresión
 
-## Atajos estándar
+`Save Project` y `Save Project As...` guardan un archivo HTML editable por la
+aplicación. Ese archivo conserva metadata interna y, cuando corresponde, la
+imagen original embebida para poder continuar editando.
 
-- `Ctrl/Cmd + Q` → salir de la app.
-- `Ctrl/Cmd + +` → zoom in.
-- `Ctrl/Cmd + -` → zoom out.
-- `Ctrl/Cmd + Z` → deshacer último borrado.
-- `DEL` → borrar elemento seleccionado.
-
----
-
-## Reglas para preimpresos
-
-Formato recomendado y aplicado en la exportación:
-
-- una sola unidad física para posicionamiento: `mm`
-- un lienzo físico fijo por página
-- `position: absolute` para campos sueltos
-- `line-height: 1` para texto exportado
-- una sola fuente de CSS por salida
-- sin `%` para `top`, `left`, `width` ni `height` de campos sueltos
-- sin `padding`, `margin` ni `border` en el lienzo principal
-
-Verificación del generador:
-
-- `TEXT_FIELD`, `LABEL`, `BUTTON` y `MARKER` se exportan como `div`
-- `TABLE` se mantiene como tabla HTML real
-- el lienzo por página se exporta en `mm`
-- el fragmento ERPNext empieza con:
+`Export ERPNext...` genera el HTML para usar en Print Format. Esta salida no
+incluye metadata editable ni imagen original. El export empieza directamente
+con los estilos de la aplicación dentro del body lógico del formato:
 
 ```html
 <style>
-...
+/* CSS generado por esta aplicación */
 </style>
 <div class="preprinted-page">
-...
+    <!-- páginas y controles exportados -->
 </div>
 ```
 
-Recomendación operativa de impresión:
-
-- `Scale 100%`
-- no usar `Fit to page`
-- usar `transform` solo para calibración temporal
-
----
-
-## Tablas en overlay
-
-La tabla de overlay se exporta usando solo etiquetas de tabla HTML:
-
-- `<table>`
-- `<colgroup>/<col>`
-- `<thead>/<th>`
-- `<tbody>/<tr>/<td>`
-
-Configuración disponible:
-
-- cantidad de columnas (al insertar)
-- ancho total de tabla (%)
-- anchos por columna (%)
-- filas de detalle (`1` o `4`)
-- encabezados.
-
-**Restricción de diseño aplicada:** solo el elemento de tabla se exporta como tabla HTML real.
-
----
-
-## Estado documental y marca de agua
-
-En el panel derecho:
-
-- check: `Enable status watermark`
-- selector: `BORRADOR` / `ANULADO`.
-
-Comportamiento de guardado/exportación:
-
-1. Si el check está **activado**:
-   - se exporta marca de agua CSS sobre todo el documento
-   - se guarda metadata de estado (`DOC_STATUS_ENABLED=true` y `DOC_STATUS=...`).
-2. Si el check está **desactivado**:
-   - no se exporta marca de agua
-   - no se incluye estado activo en el body
-   - metadata conserva `DOC_STATUS_ENABLED=false`.
-
-Al reabrir HTML, la app restaura ese estado y su activación.
-
----
-
-## Compatibilidad ERPNext / Jinja
-
-La salida está pensada para reportes HTML + Jinja:
-
-- plantilla base obligatoria tipo ERPNext Print Format
-- layout de página con lienzo físico fijo en `mm`
-- overlay con posicionamiento absoluto para campos sueltos
-- tabla HTML real solo para grids/tablas de detalle
-- soporte natural para bloques Jinja (`{{ }}` / `{% %}`) en flujos posteriores.
-
-Template base obligatoria actual:
+La plantilla base usada para documento completo no incluye llamadas Jinja de
+CSS externo. Los estilos generados por esta aplicación se insertan dentro de
+`.print-format`, no en `<head>`.
 
 ```html
+<!DOCTYPE html>
 <html>
 <head>
-    {{ include_style('print.bundle.css') }}
-    <style>{{ print_style }}</style>
 </head>
 <body>
-    <div class="action-banner print-hide">...</div>
     <div class="print-format-gutter">
         <div class="print-format">
+            <style>{{ print_style }}</style>
             {{ body }}
         </div>
     </div>
@@ -192,112 +87,117 @@ Template base obligatoria actual:
 </html>
 ```
 
-`{{ body }}` recibe exclusivamente el markup generado del overlay imprimible. La app conserva su metadata editable fuera de ese bloque para permitir reapertura del diseño.
+## Reglas de Layout
 
----
+- Posicionamiento físico en `mm`.
+- No usar porcentajes para `top`, `left`, `width` ni `height` exportados.
+- Tablas con ancho total y columnas en milímetros.
+- Campos sueltos con `position: absolute`.
+- Una tabla de overlay se exporta como tabla HTML real.
+- El PDF/imagen original solo se embebe al guardar proyecto, no al exportar.
+- Los estilos propios de la aplicación nunca van en `<head>`.
 
-## Stack técnico
+## Flujo Recomendado
 
-- Java 21 (LTS)
-- Maven
-- JavaFX 21.0.5 (`controls`, `swing`, `web`)
-- Apache PDFBox 3.0.3
-- JUnit 5
-
----
+```mermaid
+flowchart TD
+    A[Open PDF] --> B[Diseñar en Graphic Mode]
+    B --> C[Medir espacios con Measure]
+    C --> D[Configurar controles e IDs]
+    D --> E{Destino}
+    E --> F[Save Project / Save Project As]
+    E --> G[Export ERPNext]
+    E --> H[Print PDF / Print HTML / HTML Only]
+    F --> I[Open Project HTML para continuar edición]
+    G --> J[Copiar fragmento al Print Format]
+```
 
 ## Arquitectura
 
 ```mermaid
 flowchart LR
-  A[UI JavaFX\nMainViewController] --> B[PdfService]
-  A --> C[HtmlExportService]
-  A --> D[PrintService]
+    UI[MainViewController\nJavaFX UI] --> PDF[PdfService]
+    UI --> HTML[HtmlExportService]
+    UI --> PRINT[PrintService]
+    UI --> MODEL[OverlayProject\nOverlayPage\nOverlayElement]
 
-  B --> E[PDFBox\nRender + Metadata]
-  C --> B
-  C --> F[HTML single-file\n+ metadata embebida]
-  D --> G[JavaFX WebView\nPrint HTML]
-  D --> H[PDFBox Printable\nPrint PDF]
-
-  I[Model\nOverlayProject / OverlayPage / OverlayElement / DocumentStatus] --> A
-  I --> C
+    PDF --> PDFBOX[PDFBox\nRender + metadata]
+    HTML --> MODEL
+    HTML --> TEMPLATE[HtmlTemplateRepository]
+    PRINT --> WEB[JavaFX WebView]
+    PRINT --> PDFBOX
 ```
 
----
+Documentación ampliada:
 
-## Estructura de paquetes
+- [Guía de uso](docs/USAGE.md)
+- [Arquitectura](docs/ARCHITECTURE.md)
+- [Flujos de guardado/exportación](docs/EXPORT_AND_SAVE.md)
+
+## Atajos
+
+- `Ctrl/Cmd + Q`: salir.
+- `Ctrl/Cmd + +`: zoom in.
+- `Ctrl/Cmd + -`: zoom out.
+- `Ctrl/Cmd + rueda mouse`: zoom in/out.
+- `Ctrl/Cmd + Z`: deshacer último borrado.
+- `DEL`: borrar elemento seleccionado.
+- Cualquier tecla: limpia el recuadro temporal de medición si está visible.
+
+## Stack Técnico
+
+- Java 21
+- Maven
+- JavaFX 21.0.5 (`controls`, `swing`, `web`)
+- Apache PDFBox 3.0.3
+- JUnit 5
+
+## Estructura
 
 ```text
 src/main/java/com/example/pdfoverlay
 ├── Launcher.java
 ├── PdfOverlayApplication.java
 ├── model
-│   ├── DocumentStatus.java
-│   ├── OverlayElement.java
-│   ├── OverlayElementType.java
-│   ├── OverlayPage.java
-│   ├── OverlayProject.java
-│   ├── PdfDocumentMetadata.java
-│   └── PdfPageMetadata.java
 ├── service
-│   ├── ExportOptions.java
-│   ├── HtmlExportService.java
-│   ├── PdfService.java
-│   └── PrintService.java
 └── ui
-    ├── ButtonIconFactory.java
-    ├── EditorTool.java
-    └── MainViewController.java
 ```
 
----
+Recursos relevantes:
 
-## Flujo recomendado de uso
-
-1. `Open PDF`.
-2. Insertar y posicionar controles en `Graphic Mode`.
-3. Ajustar propiedades en panel derecho (ID, texto, tabla, estado).
-4. Revisar `HTML Source` para validar salida.
-5. `Save Project As...` o `Export ERPNext...` según el destino.
-6. Reabrir luego con `Open HTML` para continuar edición.
-7. Imprimir con `Print HTML` o `Print PDF`.
-
----
+```text
+src/main/resources
+├── icons/app-icon.png
+├── styles/app.css
+└── templates/erpnext/print-format.html
+```
 
 ## Ejecución
 
-### Requisitos
+Requisitos:
 
 - JDK 21
 - Maven 3.9+
 
-### Ejecutar
+Ejecutar:
 
 ```bash
 mvn clean javafx:run
 ```
 
-### Ejecutar tests
+Tests:
 
 ```bash
 mvn test
 ```
 
-### Empaquetar
+Empaquetar:
 
 ```bash
 mvn -DskipTests package
 ```
 
-### Crear instalador para Windows (EXE)
-
-Prerequisitos:
-
-- JDK 21 (incluye `jpackage`)
-- WiX Toolset v3.x con `light.exe` y `candle.exe` en `PATH`
-
-Comando:
+Instalador Windows:
 
 ```bash
 mvn -DskipTests package -Pwindows-installer
@@ -305,57 +205,20 @@ mvn -DskipTests package -Pwindows-installer
 
 Salida esperada:
 
-- `target/installer/PDFOverlayDesigner-1.0.0.exe` (o versión correspondiente)
+```text
+target/installer/PDFOverlayDesigner-1.0.0.exe
+```
 
----
+## Límites Conocidos
 
-## IntelliJ IDEA
-
-Para evitar error de runtime JavaFX faltante:
-
-- Main class: `com.example.pdfoverlay.Launcher`
-- JDK: `21`
-- proyecto Maven importado correctamente
-- ejecutar con configuración de aplicación Java (no clase JavaFX directa).
-
----
-
-## Salida HTML
-
-- Archivo único `.html`.
-- Template obligatoria ERPNext almacenada en `src/main/resources/templates/erpnext/print-format.html`.
-- Metadata embebida para re-edición (`PDF_OVERLAY_METADATA_BEGIN/END`).
-- Opción de guardar con o sin fondo PDF embebido.
-- posicionamiento físico exportado en `mm`.
-- fragmento ERPNext envuelto en `<div class="preprinted-page">`.
-
----
-
-## Límites conocidos
-
-- `Open HTML` requiere HTML generado por esta app (por metadata interna).
-- El tamaño del HTML crece con cantidad de páginas y DPI si se embebe fondo PDF.
-- En impresión física, puede requerirse calibración inicial según impresora.
-
----
-
-## Colaboración
-
-- Guía de contribución: [CONTRIBUTING.md](./CONTRIBUTING.md)
-
----
-
-## Autoría
-
-- **Omar Berroteran**
-- Copyright © 2026 Omar Berroteran
-
----
+- `Open Project HTML` requiere metadata generada por esta aplicación.
+- El HTML de proyecto puede crecer si guarda PDF embebido con alto DPI.
+- La impresión física puede requerir calibración según impresora.
 
 ## Licencia
 
-Este proyecto está licenciado bajo **Apache-2.0**.
+Apache-2.0.
 
-- Texto legal completo: [LICENSE](./LICENSE)
-- Aviso del proyecto: [NOTICE](./NOTICE)
-- Guía de contribución: [CONTRIBUTING.md](./CONTRIBUTING.md)
+- [LICENSE](LICENSE)
+- [NOTICE](NOTICE)
+- [CONTRIBUTING.md](CONTRIBUTING.md)

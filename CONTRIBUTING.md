@@ -48,14 +48,32 @@ la licencia **Apache License 2.0** del proyecto.
 ## Reglas de commits
 
 - Commit por tarea.
-- Mensajes sugeridos por prefijo:
-  - `feat:`
-  - `fix:`
-  - `docs:`
-  - `build:`
-  - `ci:`
-  - `test:`
-  - `chore:`
+- Usar título con formato:
+  - `[Component]: Imperative summary`
+- Mantener el título en 50 caracteres o menos.
+- Dejar una línea en blanco entre título y cuerpo.
+- Explicar qué cambia y por qué.
+- Cerrar commits asistidos con:
+  - `Assisted-by: Codex (GPT-5)`
+
+Ejemplo:
+
+```text
+[UI]: Add overlay measurement tool
+
+Add a temporary measurement tool for drawing an overlay box and
+reading its width and height in millimeters while editing forms.
+
+Assisted-by: Codex (GPT-5)
+```
+
+## Documentación
+
+- Actualizar README cuando cambie una función visible.
+- Actualizar `docs/USAGE.md` cuando cambie el flujo de usuario.
+- Actualizar `docs/EXPORT_AND_SAVE.md` cuando cambie guardado, exportación o impresión.
+- Actualizar `docs/ARCHITECTURE.md` cuando cambien capas, servicios o responsabilidades.
+- Si una regla evita errores previos, documentarla explícitamente.
 
 ## Pull Requests
 

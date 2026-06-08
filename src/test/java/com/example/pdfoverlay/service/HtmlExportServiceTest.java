@@ -1,6 +1,8 @@
 package com.example.pdfoverlay.service;
 
 import com.example.pdfoverlay.model.DocumentStatus;
+import com.example.pdfoverlay.model.OverlayElement;
+import com.example.pdfoverlay.model.OverlayElementType;
 import com.example.pdfoverlay.model.OverlayProject;
 import com.example.pdfoverlay.model.PdfDocumentMetadata;
 import com.example.pdfoverlay.model.PdfPageMetadata;
@@ -33,9 +35,13 @@ class HtmlExportServiceTest {
         project.setStatusWatermarkEnabled(true);
 
         String htmlContent = service.buildHtmlContent(project, 300, false, ExportOptions.defaultOptions());
+        assertTrue(htmlContent.contains("{{ include_style('print.bundle.css') }}"));
+        assertTrue(htmlContent.contains("<div class=\"print-format\">"));
         assertTrue(htmlContent.contains("DOC_STATUS_ENABLED=true"));
+        assertTrue(htmlContent.contains("HTML_TEMPLATE=erpnext-print-format"));
         assertTrue(htmlContent.contains("DOC_STATUS=VOIDED"));
-        assertTrue(htmlContent.contains("body class=\"status-voided\""));
+        assertTrue(htmlContent.contains("body.status-voided::before"));
+        assertTrue(htmlContent.contains("<body class=\"status-voided\">"));
 
         Path tempFile = Files.createTempFile("overlay-status-", ".html");
         Files.writeString(tempFile, htmlContent);
@@ -60,8 +66,32 @@ class HtmlExportServiceTest {
         String htmlContent = service.buildHtmlContent(project, 300, false, ExportOptions.defaultOptions());
 
         assertTrue(htmlContent.contains("DOC_STATUS_ENABLED=false"));
+        assertTrue(htmlContent.contains("HTML_TEMPLATE=erpnext-print-format"));
         assertFalse(htmlContent.contains("DOC_STATUS=VOIDED"));
         assertFalse(htmlContent.contains("status-draft::before"));
-        assertFalse(htmlContent.contains("body class=\"status-draft\""));
+        assertTrue(htmlContent.contains("<div class=\"print-format-gutter\">"));
+    }
+
+    /**
+     * Verifica que el fragmento embebible no incluya plantilla ni metadata del proyecto.
+     */
+    @Test
+    void shouldBuildEmbedFragmentWithoutTemplateOrMetadata() throws Exception {
+        HtmlExportService service = new HtmlExportService(new PdfService());
+        OverlayProject project = new OverlayProject(
+                Path.of("sample.pdf"),
+                new PdfDocumentMetadata(Path.of("sample.pdf"), List.of(new PdfPageMetadata(0, 612, 792)))
+        );
+        project.getOverlayPage(0).addElement(new OverlayElement(OverlayElementType.LABEL, 0.1, 0.1, 0.2, 0.05, "Customer"));
+
+        String fragment = service.buildEmbedHtmlFragment(project, 300, false, ExportOptions.defaultOptions());
+
+        assertTrue(fragment.contains("<style>"));
+        assertTrue(fragment.contains("table.print-page"));
+        assertTrue(fragment.contains("Customer"));
+        assertFalse(fragment.contains("{{ include_style('print.bundle.css') }}"));
+        assertFalse(fragment.contains("PDF_OVERLAY_METADATA_BEGIN"));
+        assertFalse(fragment.contains("<html>"));
+        assertFalse(fragment.contains("<body>"));
     }
 }

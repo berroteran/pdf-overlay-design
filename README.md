@@ -131,9 +131,31 @@ Al reabrir HTML, la app restaura ese estado y su activación.
 
 La salida está pensada para reportes HTML + Jinja:
 
+- plantilla base obligatoria tipo ERPNext Print Format
 - layout de página con `table.print-page`
 - overlay estructurado con tablas
 - soporte natural para bloques Jinja (`{{ }}` / `{% %}`) en flujos posteriores.
+
+Template base obligatoria actual:
+
+```html
+<html>
+<head>
+    {{ include_style('print.bundle.css') }}
+    <style>{{ print_style }}</style>
+</head>
+<body>
+    <div class="action-banner print-hide">...</div>
+    <div class="print-format-gutter">
+        <div class="print-format">
+            {{ body }}
+        </div>
+    </div>
+</body>
+</html>
+```
+
+`{{ body }}` recibe exclusivamente el markup generado del overlay imprimible. La app conserva su metadata editable fuera de ese bloque para permitir reapertura del diseño.
 
 ---
 
@@ -264,6 +286,7 @@ Para evitar error de runtime JavaFX faltante:
 ## Salida HTML
 
 - Archivo único `.html`.
+- Template obligatoria ERPNext almacenada en `src/main/resources/templates/erpnext/print-format.html`.
 - Metadata embebida para re-edición (`PDF_OVERLAY_METADATA_BEGIN/END`).
 - Opción de guardar con o sin fondo PDF embebido.
 - `table.print-page` exporta `padding: 0`.

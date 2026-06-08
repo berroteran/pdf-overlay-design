@@ -7,6 +7,8 @@ import com.example.pdfoverlay.model.OverlayPage;
 import com.example.pdfoverlay.model.OverlayProject;
 import com.example.pdfoverlay.model.PdfDocumentMetadata;
 import com.example.pdfoverlay.model.PdfPageMetadata;
+import com.example.pdfoverlay.template.HtmlTemplateRepository;
+import com.example.pdfoverlay.template.HtmlTemplateType;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -30,8 +32,12 @@ public final class HtmlExportService {
 
     private static final String METADATA_BEGIN = "PDF_OVERLAY_METADATA_BEGIN";
     private static final String METADATA_END = "PDF_OVERLAY_METADATA_END";
+    private static final String TEMPLATE_CODE_PREFIX = "HTML_TEMPLATE=";
+    private static final String PRINT_STYLE_PLACEHOLDER = "{{ print_style }}";
+    private static final String BODY_PLACEHOLDER = "{{ body }}";
 
     private final PdfService pdfService;
+    private final HtmlTemplateRepository htmlTemplateRepository;
 
     /**
      * Crea el servicio con dependencia al render de PDF.
@@ -39,7 +45,21 @@ public final class HtmlExportService {
      * @param pdfService servicio de render PDF.
      */
     public HtmlExportService(PdfService pdfService) {
+        this(pdfService, new HtmlTemplateRepository());
+    }
+
+    /**
+     * Crea el servicio con dependencias explícitas.
+     *
+     * @param pdfService             servicio de render PDF.
+     * @param htmlTemplateRepository repositorio de templates HTML.
+     */
+    public HtmlExportService(PdfService pdfService, HtmlTemplateRepository htmlTemplateRepository) {
         this.pdfService = Objects.requireNonNull(pdfService, "pdfService is required");
+        this.htmlTemplateRepository = Objects.requireNonNull(
+                htmlTemplateRepository,
+                "htmlTemplateRepository is required"
+        );
     }
 
     /**
@@ -122,7 +142,9 @@ public final class HtmlExportService {
         }
 
         StringBuilder html = new StringBuilder();
-        html.append(buildHtmlHeader(project, exportOptions));
+        String printStyle = buildPrintStyle(project, exportOptions);
+        StringBuilder bodyContent = new StringBuilder();
+        String bodyAttributes = buildBodyAttributes(project);
 
         for (PdfPageMetadata pageMetadata : project.getMetadata().getPages()) {
             int pageIndex = pageMetadata.pageIndex();
@@ -132,12 +154,52 @@ public final class HtmlExportService {
                 imageDataUri = "data:image/png;base64," + Base64.getEncoder().encodeToString(pngBytes);
             }
             OverlayPage overlayPage = project.getOverlayPage(pageIndex);
-            html.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground));
+            bodyContent.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground));
         }
 
-        html.append(buildMetadataComment(project));
-        html.append("</body>\n</html>\n");
+        html.append(renderUsingTemplate(printStyle, bodyContent.toString(), bodyAttributes));
+        appendMetadataBeforeClosingBody(html, buildMetadataComment(project, HtmlTemplateType.ERPNEXT_PRINT_FORMAT));
         return html.toString();
+    }
+
+    /**
+     * Construye un fragmento HTML sin plantilla ni metadata, listo para incrustar en otro sistema.
+     *
+     * @param project              proyecto fuente.
+     * @param renderDpi            resolución para render de fondo.
+     * @param includePdfBackground true para incrustar fondo PDF.
+     * @param exportOptions        opciones visuales de exportación.
+     * @return fragmento HTML con estilos y body imprimible.
+     * @throws IOException cuando falla la conversión de páginas PDF.
+     */
+    public String buildEmbedHtmlFragment(OverlayProject project, float renderDpi,
+                                         boolean includePdfBackground, ExportOptions exportOptions) throws IOException {
+        Objects.requireNonNull(project, "project is required");
+        Objects.requireNonNull(exportOptions, "exportOptions is required");
+        if (renderDpi <= 0) {
+            throw new IllegalArgumentException("renderDpi must be > 0");
+        }
+
+        String printStyle = buildPrintStyle(project, exportOptions);
+        StringBuilder bodyContent = new StringBuilder();
+
+        for (PdfPageMetadata pageMetadata : project.getMetadata().getPages()) {
+            int pageIndex = pageMetadata.pageIndex();
+            String imageDataUri = "";
+            if (includePdfBackground) {
+                byte[] pngBytes = pdfService.renderPageToPngBytes(project.getPdfPath(), pageIndex, renderDpi);
+                imageDataUri = "data:image/png;base64," + Base64.getEncoder().encodeToString(pngBytes);
+            }
+            OverlayPage overlayPage = project.getOverlayPage(pageIndex);
+            bodyContent.append(buildPageMarkup(pageMetadata, overlayPage, imageDataUri, includePdfBackground));
+        }
+
+        return """
+                <style>
+                %s
+                </style>
+                %s
+                """.formatted(printStyle, bodyContent);
     }
 
     /**
@@ -158,7 +220,7 @@ public final class HtmlExportService {
         return parseProject(metadata);
     }
 
-    private String buildHtmlHeader(OverlayProject project, ExportOptions options) {
+    private String buildPrintStyle(OverlayProject project, ExportOptions options) {
         DocumentStatus documentStatus = project.getDocumentStatus();
         boolean statusWatermarkEnabled = project.isStatusWatermarkEnabled();
         String statusClass = statusWatermarkEnabled ? documentStatus.getBodyClass() : "";
@@ -184,7 +246,6 @@ public final class HtmlExportService {
                         body.status-voided::before { content: "ANULADO"; }
                     """.formatted(statusText)
                 : "";
-        String bodyAttributes = statusWatermarkEnabled ? " class=\"" + statusClass + "\"" : "";
         String fontFamily = options.exportFont() ? "font-family: \"Segoe UI\", Tahoma, sans-serif;" : "";
         String fontSize10 = options.exportFont() ? "font-size: 10pt;" : "";
         String fontSize9 = options.exportFont() ? "font-size: 9pt;" : "";
@@ -199,122 +260,115 @@ public final class HtmlExportService {
                 : "background: transparent;";
 
         return """
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>PDF Overlay Print</title>
-                    <style>
-                        * { box-sizing: border-box; }
-                        body {
-                            margin: 0;
-                            padding: 12px;
-                            background: #f0f2f4;
-                            %s
-                        }
-                        %s
-                        table.print-page {
-                            position: relative;
-                            page-break-after: always;
-                            break-after: page;
-                            margin: 0 auto 12px;
-                            padding: 0;
-                            border: 1px solid #d1d7df;
-                            border-collapse: collapse;
-                            border-spacing: 0;
-                            table-layout: fixed;
-                            background-repeat: no-repeat;
-                            background-size: 100%% 100%%;
-                            background-position: center center;
-                            overflow: hidden;
-                        }
-                        table.print-page > tbody > tr > td {
-                            padding: 0;
-                            margin: 0;
-                            border: none;
-                        }
-                        .overlay-canvas {
-                            width: 100%%;
-                            height: 100%%;
-                        }
-                        table.overlay-item {
-                            position: absolute;
-                            border-collapse: collapse;
-                            border-spacing: 0;
-                            transform-origin: top left;
-                        }
-                        table.overlay-item > tbody > tr > td {
-                            margin: 0;
-                            padding: 1px 2px;
-                            vertical-align: top;
-                            line-height: 1.15;
-                        }
-                        table.overlay-text > tbody > tr > td {
-                            %s
-                            background: rgba(255, 255, 255, 0.15);
-                            color: #0a0d11;
-                            %s
-                        }
-                        table.overlay-label > tbody > tr > td {
-                            color: #0a0d11;
-                            %s
-                            white-space: nowrap;
-                        }
-                        table.overlay-button > tbody > tr > td {
-                            border: 1px solid #3d4d5d;
-                            background: #e7edf4;
-                            color: #0a0d11;
-                            %s
-                            text-align: center;
-                        }
-                        table.overlay-marker > tbody > tr > td {
-                            padding: 0;
-                            border-radius: 999px;
-                            border: 1px solid #8d0000;
-                            background: #e00000;
-                        }
-                        table.overlay-table {
-                            table-layout: fixed;
-                            border-collapse: collapse;
-                            border-spacing: 0;
-                            background: transparent;
-                        }
-                        table.overlay-table > colgroup > col {
-                            border: none;
-                        }
-                        table.overlay-table > thead > tr > th {
-                            %s
-                            %s
-                            color: #0a0d11;
-                            %s
-                            font-weight: 700;
-                            padding: 2px 4px;
-                            text-align: left;
-                            vertical-align: top;
-                        }
-                        table.overlay-table > tbody > tr > td {
-                            %s
-                            %s
-                            color: #0a0d11;
-                            %s
-                            padding: 2px 4px;
-                            vertical-align: top;
-                        }
-                        @media print {
-                            body {
-                                margin: 0;
-                                padding: 0;
-                                background: white;
-                            }
-                            table.print-page {
-                                margin: 0;
-                                border: none;
-                            }
-                        }
-                    </style>
-                </head>
-                <body%s>
+                * { box-sizing: border-box; }
+                body {
+                    margin: 0;
+                    padding: 12px;
+                    background: #f0f2f4;
+                    %s
+                }
+                %s
+                .print-format {
+                    min-height: 100vh;
+                }
+                table.print-page {
+                    position: relative;
+                    page-break-after: always;
+                    break-after: page;
+                    margin: 0 auto 12px;
+                    padding: 0;
+                    border: 1px solid #d1d7df;
+                    border-collapse: collapse;
+                    border-spacing: 0;
+                    table-layout: fixed;
+                    background-repeat: no-repeat;
+                    background-size: 100%% 100%%;
+                    background-position: center center;
+                    overflow: hidden;
+                }
+                table.print-page > tbody > tr > td {
+                    padding: 0;
+                    margin: 0;
+                    border: none;
+                }
+                .overlay-canvas {
+                    width: 100%%;
+                    height: 100%%;
+                }
+                table.overlay-item {
+                    position: absolute;
+                    border-collapse: collapse;
+                    border-spacing: 0;
+                    transform-origin: top left;
+                }
+                table.overlay-item > tbody > tr > td {
+                    margin: 0;
+                    padding: 1px 2px;
+                    vertical-align: top;
+                    line-height: 1.15;
+                }
+                table.overlay-text > tbody > tr > td {
+                    %s
+                    background: rgba(255, 255, 255, 0.15);
+                    color: #0a0d11;
+                    %s
+                }
+                table.overlay-label > tbody > tr > td {
+                    color: #0a0d11;
+                    %s
+                    white-space: nowrap;
+                }
+                table.overlay-button > tbody > tr > td {
+                    border: 1px solid #3d4d5d;
+                    background: #e7edf4;
+                    color: #0a0d11;
+                    %s
+                    text-align: center;
+                }
+                table.overlay-marker > tbody > tr > td {
+                    padding: 0;
+                    border-radius: 999px;
+                    border: 1px solid #8d0000;
+                    background: #e00000;
+                }
+                table.overlay-table {
+                    table-layout: fixed;
+                    border-collapse: collapse;
+                    border-spacing: 0;
+                    background: transparent;
+                }
+                table.overlay-table > colgroup > col {
+                    border: none;
+                }
+                table.overlay-table > thead > tr > th {
+                    %s
+                    %s
+                    color: #0a0d11;
+                    %s
+                    font-weight: 700;
+                    padding: 2px 4px;
+                    text-align: left;
+                    vertical-align: top;
+                }
+                table.overlay-table > tbody > tr > td {
+                    %s
+                    %s
+                    color: #0a0d11;
+                    %s
+                    padding: 2px 4px;
+                    vertical-align: top;
+                }
+                @media print {
+                    body {
+                        margin: 0;
+                        padding: 0;
+                        background: white;
+                    }
+                    table.print-page {
+                        margin: 0;
+                        border: none;
+                    }
+                }
                 """.formatted(
                 fontFamily,
                 watermarkCss,
@@ -327,8 +381,7 @@ public final class HtmlExportService {
                 fontSize10,
                 tableCellBorder,
                 tableCellBackground,
-                fontSize10,
-                bodyAttributes
+                fontSize10
         );
     }
 
@@ -455,10 +508,11 @@ public final class HtmlExportService {
         return builder.toString();
     }
 
-    private String buildMetadataComment(OverlayProject project) {
+    private String buildMetadataComment(OverlayProject project, HtmlTemplateType templateType) {
         StringBuilder metadata = new StringBuilder();
         metadata.append("\n<!-- ").append(METADATA_BEGIN).append('\n');
         metadata.append("VERSION=1\n");
+        metadata.append(TEMPLATE_CODE_PREFIX).append(templateType.getCode()).append('\n');
         metadata.append("DOC_STATUS_ENABLED=").append(project.isStatusWatermarkEnabled()).append('\n');
         if (project.isStatusWatermarkEnabled()) {
             metadata.append("DOC_STATUS=").append(project.getDocumentStatus().name()).append('\n');
@@ -494,6 +548,36 @@ public final class HtmlExportService {
         return metadata.toString();
     }
 
+    private String renderUsingTemplate(String printStyle, String bodyContent, String bodyAttributes) throws IOException {
+        String rendered = htmlTemplateRepository.render(
+                HtmlTemplateType.ERPNEXT_PRINT_FORMAT,
+                Map.of(
+                        PRINT_STYLE_PLACEHOLDER, printStyle,
+                        BODY_PLACEHOLDER, bodyContent
+                )
+        );
+        if (bodyAttributes.isBlank()) {
+            return rendered;
+        }
+        return rendered.replaceFirst("<body>", "<body" + bodyAttributes + ">");
+    }
+
+    private String buildBodyAttributes(OverlayProject project) {
+        if (!project.isStatusWatermarkEnabled()) {
+            return "";
+        }
+        return " class=\"" + project.getDocumentStatus().getBodyClass() + "\"";
+    }
+
+    private void appendMetadataBeforeClosingBody(StringBuilder html, String metadataComment) {
+        int bodyCloseIndex = html.lastIndexOf("</body>");
+        if (bodyCloseIndex < 0) {
+            html.append(metadataComment);
+            return;
+        }
+        html.insert(bodyCloseIndex, metadataComment);
+    }
+
     private String extractMetadata(String htmlContent) {
         String beginToken = "<!-- " + METADATA_BEGIN;
         String endToken = METADATA_END + " -->";
@@ -527,6 +611,11 @@ public final class HtmlExportService {
             if (line.startsWith("PDF_PATH_B64=")) {
                 String encodedPath = line.substring("PDF_PATH_B64=".length());
                 pdfPath = Path.of(base64Decode(encodedPath));
+                continue;
+            }
+
+            if (line.startsWith(TEMPLATE_CODE_PREFIX)) {
+                HtmlTemplateType.fromCode(line.substring(TEMPLATE_CODE_PREFIX.length()));
                 continue;
             }
 

@@ -37,6 +37,12 @@
     -fx-border-width: 0 0 1 0;
 }
 
+.menu-bar {
+    -fx-background-color: linear-gradient(to bottom, #fdfefe, #eef3f8);
+    -fx-border-color: #c6d1dc;
+    -fx-border-width: 0 0 1 0;
+}
+
 .toolbar-button-large {
     -fx-font-size: 13px;
     -fx-font-weight: 600;

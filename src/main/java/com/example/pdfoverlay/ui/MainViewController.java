@@ -28,8 +28,12 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Slider;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
@@ -134,6 +138,7 @@ public final class MainViewController {
 
     private final Button openHtmlButton;
     private final Button exportButton;
+    private final Button exportErpNextButton;
     private final Button printHtmlButton;
     private final Button printPdfButton;
     private final Button previousPageButton;
@@ -197,7 +202,8 @@ public final class MainViewController {
         this.zoomSlider = new Slider(0.0, 300.0, 100.0);
 
         this.openHtmlButton = new Button("Open HTML");
-        this.exportButton = new Button("Save HTML As...");
+        this.exportButton = new Button("Save Project As...");
+        this.exportErpNextButton = new Button("Export ERPNext...");
         this.printHtmlButton = new Button("Print HTML");
         this.printPdfButton = new Button("Print PDF");
         this.previousPageButton = new Button("< Prev");
@@ -222,7 +228,7 @@ public final class MainViewController {
         configureActions();
         zoomValueLabel.setText(formatZoomPercentage(zoomSlider.getValue()));
 
-        root.setTop(buildTopToolbar());
+        root.setTop(buildTopArea());
         root.setCenter(buildWorkspacePane());
         root.setRight(buildInspectorPanel());
         root.setBottom(buildStatusBar());
@@ -426,6 +432,51 @@ public final class MainViewController {
         }
     }
 
+    private Node buildTopArea() {
+        VBox topArea = new VBox(buildMenuBar(), buildTopToolbar());
+        return topArea;
+    }
+
+    private MenuBar buildMenuBar() {
+        MenuItem openPdfMenuItem = new MenuItem("Open PDF...");
+        openPdfMenuItem.setOnAction(event -> openPdfFile());
+
+        MenuItem openProjectMenuItem = new MenuItem("Open Project HTML...");
+        openProjectMenuItem.setOnAction(event -> openHtmlFile());
+
+        MenuItem saveProjectMenuItem = new MenuItem("Save Project As...");
+        saveProjectMenuItem.setOnAction(event -> saveProjectHtml());
+
+        MenuItem exportErpNextMenuItem = new MenuItem("Export ERPNext...");
+        exportErpNextMenuItem.setOnAction(event -> exportErpNextFragment());
+
+        MenuItem printHtmlMenuItem = new MenuItem("Print HTML...");
+        printHtmlMenuItem.setOnAction(event -> printHtmlLayer());
+
+        MenuItem printPdfMenuItem = new MenuItem("Print PDF...");
+        printPdfMenuItem.setOnAction(event -> printPdfDocument());
+
+        MenuItem exitMenuItem = new MenuItem("Exit");
+        exitMenuItem.setOnAction(event -> Platform.exit());
+
+        Menu fileMenu = new Menu("File");
+        fileMenu.getItems().addAll(
+                openPdfMenuItem,
+                openProjectMenuItem,
+                new SeparatorMenuItem(),
+                saveProjectMenuItem,
+                exportErpNextMenuItem,
+                new SeparatorMenuItem(),
+                printHtmlMenuItem,
+                printPdfMenuItem,
+                new SeparatorMenuItem(),
+                exitMenuItem
+        );
+
+        MenuBar menuBar = new MenuBar(fileMenu);
+        return menuBar;
+    }
+
     private Node buildTopToolbar() {
         Button openButton = new Button("Open PDF");
         openButton.setOnAction(event -> openPdfFile());
@@ -433,15 +484,18 @@ public final class MainViewController {
         applyButtonIcon(openButton, ButtonIconFactory.openPdfIcon());
 
         openHtmlButton.setOnAction(event -> openHtmlFile());
-        exportButton.setOnAction(event -> exportHtmlLayer());
+        exportButton.setOnAction(event -> saveProjectHtml());
+        exportErpNextButton.setOnAction(event -> exportErpNextFragment());
         printHtmlButton.setOnAction(event -> printHtmlLayer());
         printPdfButton.setOnAction(event -> printPdfDocument());
         applyToolbarButtonStyle(openHtmlButton);
         applyToolbarButtonStyle(exportButton);
+        applyToolbarButtonStyle(exportErpNextButton);
         applyToolbarButtonStyle(printHtmlButton);
         applyToolbarButtonStyle(printPdfButton);
         applyButtonIcon(openHtmlButton, ButtonIconFactory.openHtmlIcon());
         applyButtonIcon(exportButton, ButtonIconFactory.saveHtmlIcon());
+        applyButtonIcon(exportErpNextButton, ButtonIconFactory.saveHtmlIcon());
         applyButtonIcon(printHtmlButton, ButtonIconFactory.printHtmlIcon());
         applyButtonIcon(printPdfButton, ButtonIconFactory.printPdfIcon());
 
@@ -464,6 +518,7 @@ public final class MainViewController {
                 openButton,
                 openHtmlButton,
                 exportButton,
+                exportErpNextButton,
                 printHtmlButton,
                 printPdfButton,
                 new Separator(),
@@ -1525,6 +1580,7 @@ public final class MainViewController {
     private void updateButtonsState() {
         boolean hasProject = currentProject != null;
         exportButton.setDisable(!hasProject);
+        exportErpNextButton.setDisable(!hasProject);
         printHtmlButton.setDisable(!hasProject);
         printPdfButton.setDisable(!hasProject);
         previousPageButton.setDisable(!hasProject || currentPageIndex <= 0);
@@ -1543,7 +1599,7 @@ public final class MainViewController {
         }
     }
 
-    private void exportHtmlLayer() {
+    private void saveProjectHtml() {
         if (currentProject == null) {
             statusLabel.setText("Open a PDF first");
             return;
@@ -1551,11 +1607,11 @@ public final class MainViewController {
 
         Optional<SaveExportSelection> exportSelection = showExportOptionsDialog();
         if (exportSelection.isEmpty()) {
-            statusLabel.setText("Export cancelled");
+            statusLabel.setText("Save cancelled");
             return;
         }
 
-        Path targetHtmlPath = resolveSaveHtmlPath();
+        Path targetHtmlPath = resolveHtmlPath("Save HTML project as", "-project.html");
         if (targetHtmlPath == null) {
             return;
         }
@@ -1570,14 +1626,51 @@ public final class MainViewController {
                     exportSelection.get().exportOptions()
             );
             currentHtmlPath = htmlPath;
-            statusLabel.setText("Export completed: " + htmlPath.getFileName());
+            statusLabel.setText("Project saved: " + htmlPath.getFileName());
             Alert info = new Alert(Alert.AlertType.INFORMATION, "HTML generated at:\n" + htmlPath, ButtonType.OK);
-            info.setHeaderText("Export completed");
+            info.setHeaderText("Project saved");
             info.initOwner(ownerStage);
             info.showAndWait();
         } catch (IOException ex) {
-            LOGGER.log(Level.SEVERE, "Error exporting HTML", ex);
-            showError("Cannot export HTML", ex.getMessage());
+            LOGGER.log(Level.SEVERE, "Error saving HTML project", ex);
+            showError("Cannot save HTML project", ex.getMessage());
+        }
+    }
+
+    private void exportErpNextFragment() {
+        if (currentProject == null) {
+            statusLabel.setText("Open a PDF first");
+            return;
+        }
+
+        Optional<SaveExportSelection> exportSelection = showExportOptionsDialog();
+        if (exportSelection.isEmpty()) {
+            statusLabel.setText("Export cancelled");
+            return;
+        }
+
+        Path targetHtmlPath = resolveHtmlPath("Export ERPNext HTML as", "-erpnext-fragment.html");
+        if (targetHtmlPath == null) {
+            return;
+        }
+
+        try {
+            int selectedDpi = exportDpiCombo.getValue() == null ? 300 : exportDpiCombo.getValue();
+            String fragmentHtml = htmlExportService.buildEmbedHtmlFragment(
+                    currentProject,
+                    selectedDpi,
+                    exportSelection.get().includePdfBackground(),
+                    exportSelection.get().exportOptions()
+            );
+            Files.writeString(targetHtmlPath, fragmentHtml);
+            statusLabel.setText("ERPNext export completed: " + targetHtmlPath.getFileName());
+            Alert info = new Alert(Alert.AlertType.INFORMATION, "ERPNext fragment generated at:\n" + targetHtmlPath, ButtonType.OK);
+            info.setHeaderText("ERPNext export completed");
+            info.initOwner(ownerStage);
+            info.showAndWait();
+        } catch (IOException ex) {
+            LOGGER.log(Level.SEVERE, "Error exporting ERPNext fragment", ex);
+            showError("Cannot export ERPNext fragment", ex.getMessage());
         }
     }
 
@@ -1875,9 +1968,9 @@ public final class MainViewController {
         return dialog.showAndWait();
     }
 
-    private Path resolveSaveHtmlPath() {
+    private Path resolveHtmlPath(String dialogTitle, String defaultSuffix) {
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Save HTML overlay as");
+        chooser.setTitle(dialogTitle);
         chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("HTML files", "*.html"));
 
         if (currentHtmlPath != null) {
@@ -1892,7 +1985,7 @@ public final class MainViewController {
             if (parent != null && Files.exists(parent)) {
                 chooser.setInitialDirectory(parent.toFile());
             }
-            chooser.setInitialFileName(stripExtension(pdfPath.getFileName().toString()) + "-overlay.html");
+            chooser.setInitialFileName(stripExtension(pdfPath.getFileName().toString()) + defaultSuffix);
         }
 
         java.io.File selectedFile = chooser.showSaveDialog(ownerStage);

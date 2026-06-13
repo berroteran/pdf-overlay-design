@@ -780,7 +780,7 @@ public final class MainViewController {
 
         Menu openMenu = new Menu("Open");
         openMenu.setGraphic(ButtonIconFactory.fileMenuIcon());
-        openMenu.getItems().addAll(openPdfMenuItem, openProjectMenuItem, recentFilesMenu);
+        openMenu.getItems().addAll(openPdfMenuItem, openProjectMenuItem);
 
         Menu printMenu = new Menu("Print");
         printMenu.setGraphic(ButtonIconFactory.printHtmlIcon());
@@ -803,7 +803,7 @@ public final class MainViewController {
                 exitMenuItem
         );
 
-        MenuBar menuBar = new MenuBar(fileMenu);
+        MenuBar menuBar = new MenuBar(fileMenu, recentFilesMenu);
         return menuBar;
     }
 

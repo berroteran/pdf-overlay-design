@@ -1,6 +1,24 @@
 # Arquitectura
 
-## Capas
+## Estado actual y evolución
+
+Los diagramas y clases de esta guía describen la implementación actual.
+Las reglas y la estructura objetivo están en
+[AGENTS.md](../AGENTS.md), en particular en organización por dominio y componente
+y desacople del núcleo.
+
+Actualmente existen paquetes `model`, `service`, `template` y `ui`.
+`PdfService` expone imágenes JavaFX y `PrintService` utiliza impresión y WebView
+de JavaFX; estos acoplamientos deben separarse mediante adaptadores al extraer
+casos de uso reutilizables desde una CLI o un servicio sin interfaz gráfica.
+La aplicación ya dispone de temas; la internacionalización mediante recursos
+inglés/español y la CLI forman parte de las reglas de evolución y no se declaran
+implementadas en esta guía.
+
+La migración se realizará por componentes y dentro del alcance de cada tarea,
+preservando comportamiento y compatibilidad de los archivos existentes.
+
+## Capas actuales
 
 ```mermaid
 flowchart TB

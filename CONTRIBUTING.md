@@ -34,16 +34,11 @@ la licencia **Apache License 2.0** del proyecto.
 
 ## Convenciones del proyecto
 
-- Código en inglés:
-  - nombres de clases, métodos, variables, enums y campos.
-- Documentación técnica en español:
-  - comentarios y JavaDoc.
-- Mantener diseño por capas:
-  - UI/controlador
-  - servicios
-  - modelo.
-- Evitar dependencias innecesarias.
-- Priorizar mantenibilidad y simplicidad operativa.
+Las reglas de desarrollo y la forma de trabajo se mantienen en
+[AGENTS.md](AGENTS.md), referencia central para colaboradores y agentes.
+Leerlas antes de implementar: incluyen idiomas, organización por dominio y
+componente, desacople del núcleo, reutilización, temas, internacionalización,
+contratos de CLI y criterios de verificación.
 
 ## Reglas de commits
 

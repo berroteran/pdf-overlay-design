@@ -145,6 +145,7 @@ flowchart LR
 
 Documentación ampliada:
 
+- [Instrucciones de desarrollo y agentes](AGENTS.md)
 - [Guía de uso](docs/USAGE.md)
 - [Arquitectura](docs/ARCHITECTURE.md)
 - [Flujos de guardado/exportación](docs/EXPORT_AND_SAVE.md)
